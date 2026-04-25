@@ -1,0 +1,18 @@
+services:
+  admin-api:
+    build:
+      context: .
+    command: uvicorn src.ai_recepcionista.api.app:app --host 0.0.0.0 --port 8000
+    env_file:
+      - .env.example
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  ari-worker:
+    build:
+      context: .
+    command: ari-worker
+    env_file:
+      - .env.example
+    restart: unless-stopped
