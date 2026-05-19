@@ -90,6 +90,11 @@ En el servidor Asterisk, apunta el proyecto al host remoto editando `.env` o `co
 VOSK_WEBSOCKET_URL=ws://IP_DEL_SERVIDOR_VOSK:2700
 ```
 
+Si el AGI va a copiarse a `/var/lib/asterisk/agi-bin/` en vez de quedar enlazado al repo,
+declara rutas absolutas para `VOSK_COBRANZA_CONFIG`, `VOSK_COBRANZA_INTENTS` y
+`VOSK_COBRANZA_LOGGING`. Eso evita depender del `__file__` del AGI para encontrar `config/`
+y la logica Python compartida.
+
 ## 4. Descarga del modelo espanol
 
 El contenedor no descarga modelos automaticamente. Debes descargar y extraer el modelo antes de arrancar Vosk.
@@ -134,6 +139,8 @@ cp /opt/vicidial-vosk-cobranza-ivr/agi/vosk_cobranza.py /var/lib/asterisk/agi-bi
 ```
 
 Si el proyecto queda fuera de `/opt/vicidial-vosk-cobranza-ivr`, revisa las rutas de configuracion en `.env`.
+Para produccion controlada usa rutas absolutas y define tambien `VOSK_MIN_RMS` si necesitas
+subir o bajar el umbral de silencio sin tocar el YAML.
 
 ## 6. Permisos chmod +x
 
@@ -187,18 +194,22 @@ Edita o agrega en `/etc/asterisk/extensions_custom.conf` el contexto:
 [ivr-cobranza-vosk]
 exten => s,1,Answer()
  same => n,Set(TRY=0)
+ same => n,Set(TRANSFER_MIN_CONFIDENCE=${IF($["${TRANSFER_MIN_CONFIDENCE}"=""]?0.75:${TRANSFER_MIN_CONFIDENCE})})
  same => n,Playback(custom/mensaje-cobranza)
  same => n(start),Playback(custom/pregunta-abogado)
  same => n,Read(OPCION,,1,,1,3)
  same => n,GotoIf($["${OPCION}"="1"]?transferir-abogado,1)
  same => n,GotoIf($["${OPCION}"="2"]?finalizar,1)
- same => n,EAGI(vosk_cobranza.py)
- same => n,NoOp(Vosk texto: ${VOSK_TEXT})
- same => n,NoOp(Vosk intent: ${VOSK_INTENT})
- same => n,GotoIf($["${VOSK_INTENT}"="SI"]?transferir-abogado,1)
+ same => n,EAGI(vosk_cobranza.py,${OPCION})
+ same => n,NoOp(Vosk intent: ${VOSK_INTENT} source: ${VOSK_SOURCE})
+ same => n,GotoIf($["${VOSK_INTENT}"="SI"]?validar-transferencia,1)
  same => n,GotoIf($["${VOSK_INTENT}"="NO"]?finalizar,1)
  same => n,GotoIf($["${VOSK_INTENT}"="DUDA"]?manejar-reintento,1)
  same => n,GotoIf($["${VOSK_INTENT}"="SILENCIO"]?manejar-reintento,1)
+ same => n,Goto(manejar-reintento,1)
+
+exten => validar-transferencia,1,GotoIf($["${VOSK_SOURCE}"="dtmf"]?transferir-abogado,1)
+ same => n,GotoIf($[${VOSK_CONFIDENCE} >= ${TRANSFER_MIN_CONFIDENCE}]?transferir-abogado,1)
  same => n,Goto(manejar-reintento,1)
 
 exten => manejar-reintento,1,Set(TRY=$[${TRY}+1])
@@ -209,18 +220,47 @@ exten => reintento,1,Playback(custom/no-entendi)
  same => n,Goto(s,start)
 
 exten => transferir-abogado,1,Playback(custom/lo-comunico)
- same => n,Goto(default,INGROUP_ABOGADOS,1)
+ same => n,Goto(vicidial-cobranza-transfer,s,1)
 
 exten => finalizar,1,Playback(custom/mensaje-final)
+ same => n,Hangup()
+
+[vicidial-cobranza-transfer]
+exten => s,1,NoOp(Bridge cobranza -> abogados)
+ same => n,Set(__LAWYER_TRANSFER_CONTEXT=${IF($["${LAWYER_TRANSFER_CONTEXT}"=""]?REEMPLAZAR_CONTEXTO_ABOGADOS:${LAWYER_TRANSFER_CONTEXT})})
+ same => n,Set(__LAWYER_TRANSFER_EXTEN=${IF($["${LAWYER_TRANSFER_EXTEN}"=""]?REEMPLAZAR_DESTINO_ABOGADOS:${LAWYER_TRANSFER_EXTEN})})
+ same => n,Set(__LAWYER_TRANSFER_PRIORITY=${IF($["${LAWYER_TRANSFER_PRIORITY}"=""]?1:${LAWYER_TRANSFER_PRIORITY})})
+ same => n,Set(__VICI_ORIG_UNIQUEID=${UNIQUEID})
+ same => n,Set(__VICI_ORIG_CALLERID=${CALLERID(all)})
+ same => n,Set(__VICI_ORIG_CALLERID_NUM=${CALLERID(num)})
+ same => n,Set(__VICI_CAMPAIGN_ID=${CAMPAIGN_ID})
+ same => n,Set(__VICI_LEAD_ID=${LEAD_ID})
+ same => n,Set(__VICI_LIST_ID=${LIST_ID})
+ same => n,Set(__VOSK_INTENT=${VOSK_INTENT})
+ same => n,Set(__VOSK_CONFIDENCE=${VOSK_CONFIDENCE})
+ same => n,Dial(Local/route@vicidial-cobranza-transfer/n,45,g)
+ same => n,Goto(fallback,1)
+
+exten => route,1,Goto(${LAWYER_TRANSFER_CONTEXT},${LAWYER_TRANSFER_EXTEN},${LAWYER_TRANSFER_PRIORITY})
+
+exten => fallback,1,Playback(custom/mensaje-final)
  same => n,Hangup()
 ```
 
 Puntos que debes adaptar para VICIdial:
 
-- `default`
-- `INGROUP_ABOGADOS`
+- `LAWYER_TRANSFER_CONTEXT`
+- `LAWYER_TRANSFER_EXTEN`
+- `LAWYER_TRANSFER_PRIORITY`
+- `TRANSFER_MIN_CONFIDENCE`
 - los nombres reales de los audios
 - cualquier `Local/` o contexto puente que uses para entregar la llamada al flujo legal
+
+Notas de privacidad para produccion:
+
+- Evita `NoOp(${VOSK_TEXT})` en dialplan productivo.
+- `VOSK_TEXT` debe reservarse para decisiones de canal o debug controlado.
+- El proyecto deja `logging.log_transcript: false` por defecto.
 
 ## 9. Recarga de dialplan
 
@@ -264,7 +304,8 @@ En consola valida:
 
 - que se reproduzcan los audios
 - que se ejecute `EAGI(vosk_cobranza.py)`
-- que aparezcan `VOSK_TEXT` y `VOSK_INTENT`
+- que `VOSK_INTENT` se resuelva correctamente
+- que `VOSK_TEXT` solo se inspeccione si habilitas debug controlado
 - que la llamada vaya a `transferir-abogado` o `finalizar`
 
 ## 11. Prueba desde campana VICIdial
@@ -289,6 +330,22 @@ Durante la prueba, observa:
 - `/var/log/asterisk/full`
 - el log configurado por el proyecto
 - el estado del contenedor Vosk
+
+En las pruebas de transferencia valida tambien:
+
+- que `VOSK_CONFIDENCE` no permita transferencias por voz por debajo del umbral
+- que el contexto `vicidial-cobranza-transfer` conserve `UNIQUEID` y `CALLERID`
+- que `CAMPAIGN_ID`, `LEAD_ID` y `LIST_ID` sigan presentes si tu entorno los expone
+
+## Logs de produccion
+
+Por defecto el proyecto usa `RotatingFileHandler` con:
+
+- `logging.rotate_max_bytes: 10485760`
+- `logging.rotate_backup_count: 10`
+- `logging.log_transcript: false`
+
+Si necesitas diagnostico temporal, activa `logging.log_transcript: true` solo durante la ventana de prueba y vuelve a desactivarlo despues.
 
 ## 12. Troubleshooting
 
@@ -376,16 +433,16 @@ ffmpeg -i entrada.mp3 -ac 1 -ar 8000 -sample_fmt s16 /var/lib/asterisk/sounds/cu
 
 Si el IVR detecta `SI` pero no transfiere:
 
-- revisa la linea `Goto(default,INGROUP_ABOGADOS,1)`
-- confirma que `default` sea el contexto correcto en tu servidor
-- confirma que `INGROUP_ABOGADOS` exista o que tu puente VICIdial lo resuelva
-- si tu operacion usa `Local/`, cambia la transferencia por la ruta real
+- revisa `LAWYER_TRANSFER_CONTEXT`, `LAWYER_TRANSFER_EXTEN` y `LAWYER_TRANSFER_PRIORITY`
+- confirma que el contexto puente `vicidial-cobranza-transfer` este cargado
+- confirma que la ruta final exista en tu servidor
+- confirma que `VOSK_CONFIDENCE` supera `TRANSFER_MIN_CONFIDENCE` cuando la fuente es voz
+- si tu operacion usa otro puente `Local/`, cambia la ruta del sample por la tuya
 
 Ejemplo alternativo:
 
 ```ini
-exten => transferir-abogado,1,Playback(custom/lo-comunico)
- same => n,Dial(Local/INGROUP_ABOGADOS@default)
+exten => route,1,Goto(${LAWYER_TRANSFER_CONTEXT},${LAWYER_TRANSFER_EXTEN},${LAWYER_TRANSFER_PRIORITY})
 ```
 
 ## Validacion final recomendada

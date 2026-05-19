@@ -10,7 +10,15 @@ import yaml
 
 from vicidial_vosk_cobranza_ivr.config import LoggingSettings
 
-PHONE_NUMBER_PATTERN = re.compile(r"(?<!\d)(\+?\d[\d\s-]{5,}\d)(?!\d)")
+EMAIL_PATTERN = re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}\b")
+AMOUNT_PREFIX_PATTERN = re.compile(
+    r"(?i)(?<!\w)(?:\$|usd|eur|mxn|cop|ars|clp|pen|s/\.?)\s*\d+(?:[.,]\d{3})*(?:[.,]\d{2})?(?!\w)"
+)
+AMOUNT_SUFFIX_PATTERN = re.compile(
+    r"(?i)(?<!\w)\d+(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:pesos?|dolares|dólares|euros?|usd|eur|mxn|cop|ars|clp|pen)(?!\w)"
+)
+PHONE_NUMBER_PATTERN = re.compile(r"(?<!\w)(\+?\d(?:[\d\s().-]{5,}\d))(?!\w)")
+LONG_NUMBER_PATTERN = re.compile(r"(?<!\w)(\d[\d.\-]{6,}\d)(?!\w)")
 
 
 class PhoneMaskingFilter(logging.Filter):
@@ -23,7 +31,7 @@ class PhoneMaskingFilter(logging.Filter):
             return True
 
         message = record.getMessage()
-        record.msg = mask_phone_numbers(message)
+        record.msg = mask_sensitive_data(message)
         record.args = ()
         return True
 
@@ -43,6 +51,8 @@ def configure_logging(
     if "handlers" in config_data and "file" in config_data["handlers"]:
         config_data["handlers"]["file"]["filename"] = str(log_path)
         config_data["handlers"]["file"]["level"] = logging_settings.log_level
+        config_data["handlers"]["file"]["maxBytes"] = logging_settings.rotate_max_bytes
+        config_data["handlers"]["file"]["backupCount"] = logging_settings.rotate_backup_count
     if "handlers" in config_data and "console" in config_data["handlers"]:
         config_data["handlers"]["console"]["level"] = logging_settings.log_level
     if "root" in config_data:
@@ -56,13 +66,29 @@ def configure_logging(
     return logging.getLogger("vicidial_vosk_cobranza_ivr")
 
 
+def mask_sensitive_data(message: str) -> str:
+    masked = EMAIL_PATTERN.sub("[EMAIL]", message)
+    masked = AMOUNT_PREFIX_PATTERN.sub("[MONTO]", masked)
+    masked = AMOUNT_SUFFIX_PATTERN.sub("[MONTO]", masked)
+    masked = PHONE_NUMBER_PATTERN.sub(_mask_numeric_match, masked)
+    masked = LONG_NUMBER_PATTERN.sub(_mask_numeric_match, masked)
+    return masked
+
+
 def mask_phone_numbers(message: str) -> str:
-    return PHONE_NUMBER_PATTERN.sub(_mask_match, message)
+    return mask_sensitive_data(message)
 
 
-def _mask_match(match: re.Match[str]) -> str:
+def contains_sensitive_data(message: str) -> bool:
+    return mask_sensitive_data(message) != message
+
+
+def _mask_numeric_match(match: re.Match[str]) -> str:
     value = match.group(0)
     digit_positions = [index for index, char in enumerate(value) if char.isdigit()]
+    if len(digit_positions) < 7:
+        return value
+
     visible_positions = set(digit_positions[-2:])
     return "".join(
         char if not char.isdigit() or index in visible_positions else "X"

@@ -4,7 +4,7 @@
 
 La integracion propuesta deja la decision en el dialplan:
 
-- `SI`: transferir a la ruta de abogados definida fuera del codigo.
+- `SI`: transferir a la ruta de abogados definida fuera del codigo y validada por confianza.
 - `NO`: reproducir mensaje final y colgar.
 - `DUDA` o `SILENCIO`: repetir una sola vez y luego finalizar.
 
@@ -23,19 +23,50 @@ Usa [extensions_custom.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensio
 - `LAWYER_TRANSFER_CONTEXT`
 - `LAWYER_TRANSFER_EXTEN`
 - `LAWYER_TRANSFER_PRIORITY`
+- `TRANSFER_MIN_CONFIDENCE`
 - nombres reales de prompts
 
 ## Paso 3: definir la ruta hacia abogados
 
 No esta hardcodeada en Python. Debe resolverse en Asterisk o VICIdial con variables, contexto o una extension puente.
+La recomendacion principal del repo es usar el contexto `[vicidial-cobranza-transfer]` como puente seguro.
 
 Opciones comunes:
 
-1. `Goto()` a un contexto interno que entregue la llamada al flujo legal.
-2. `Dial(Local/...)` hacia una ruta VICIdial.
+1. Contexto puente que preserve variables y enrute con `Dial(Local/...)`.
+2. `Goto()` a un contexto interno solo dentro del canal Local del puente.
 3. Contexto dedicado que resuelva el ingroup o cola final.
 
-## Paso 4: mapear disposiciones
+## Paso 4: preservar variables de VICIdial
+
+El contexto puente usa variables heredables con prefijo `__` para que no se pierdan al saltar a un canal `Local/`.
+
+Variables recomendadas:
+
+- `__VICI_ORIG_UNIQUEID=${UNIQUEID}`
+- `__VICI_ORIG_CALLERID=${CALLERID(all)}`
+- `__VICI_ORIG_CALLERID_NUM=${CALLERID(num)}`
+- `__VICI_CAMPAIGN_ID=${CAMPAIGN_ID}`
+- `__VICI_LEAD_ID=${LEAD_ID}`
+- `__VICI_LIST_ID=${LIST_ID}`
+- `__VOSK_INTENT=${VOSK_INTENT}`
+- `__VOSK_CONFIDENCE=${VOSK_CONFIDENCE}`
+
+Si tu implementacion VICIdial usa mas variables, preservalas del mismo modo antes del `Dial(Local/...)`.
+
+## Paso 5: umbral de confianza
+
+Usa `TRANSFER_MIN_CONFIDENCE` en el dialplan para evitar transferencias por voz con baja confianza.
+
+Recomendacion inicial:
+
+- `0.75` para una cartera conservadora
+- subirlo si hay mucho ruido o respuestas cortas
+- bajarlo solo si validas mejora real en contacto util
+
+DTMF puede seguir transfiriendo aunque no exista STT, porque la fuente queda marcada como `dtmf`.
+
+## Paso 6: mapear disposiciones
 
 `config/ivr.yml` ya deja placeholders para:
 
@@ -45,7 +76,7 @@ Opciones comunes:
 
 Puedes usarlos desde AGI futuro o desde el propio dialplan segun tu operacion.
 
-## Paso 5: recargar Asterisk
+## Paso 7: recargar Asterisk
 
 ```bash
 asterisk -rx "dialplan reload"

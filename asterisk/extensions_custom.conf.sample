@@ -1,27 +1,35 @@
 ; Asterisk 18 sample dialplan for local Vosk cobranza IVR.
 ; Ajusta este archivo antes de usarlo en Issabel 5 / VICIdial v12.
 ;
-; Puntos que debes revisar para VICIdial:
-; - Sustituir los audios `custom/...` por tus prompts reales.
-; - Cambiar `default` si tu transferencia vive en otro contexto.
-; - Cambiar `INGROUP_ABOGADOS` por la extension, Local/ o ruta VICIdial real.
-; - Si VICIdial ya recoge DTMF antes, puedes pasar ese valor al EAGI como argumento.
+; Recomendacion principal:
+; - No transfieras directamente con Goto(default,INGROUP_ABOGADOS,1).
+; - Usa el contexto puente `vicidial-cobranza-transfer`.
+; - Define la ruta final con variables heredables:
+;   __LAWYER_TRANSFER_CONTEXT
+;   __LAWYER_TRANSFER_EXTEN
+;   __LAWYER_TRANSFER_PRIORITY
+; - Ajusta `TRANSFER_MIN_CONFIDENCE` segun tus pruebas de STT.
 
 [ivr-cobranza-vosk]
 exten => s,1,Answer()
  same => n,Set(TRY=0)
+ same => n,Set(TRANSFER_MIN_CONFIDENCE=${IF($["${TRANSFER_MIN_CONFIDENCE}"=""]?0.75:${TRANSFER_MIN_CONFIDENCE})})
  same => n,Playback(custom/mensaje-cobranza)
  same => n(start),Playback(custom/pregunta-abogado)
  same => n,Read(OPCION,,1,,1,3)
  same => n,GotoIf($["${OPCION}"="1"]?transferir-abogado,1)
  same => n,GotoIf($["${OPCION}"="2"]?finalizar,1)
- same => n,EAGI(vosk_cobranza.py)
- same => n,NoOp(Vosk texto: ${VOSK_TEXT})
- same => n,NoOp(Vosk intent: ${VOSK_INTENT})
- same => n,GotoIf($["${VOSK_INTENT}"="SI"]?transferir-abogado,1)
+ same => n,EAGI(vosk_cobranza.py,${OPCION})
+ same => n,NoOp(Vosk intent: ${VOSK_INTENT} source: ${VOSK_SOURCE} confidence: ${VOSK_CONFIDENCE})
+ same => n,GotoIf($["${VOSK_INTENT}"="SI"]?validar-transferencia,1)
  same => n,GotoIf($["${VOSK_INTENT}"="NO"]?finalizar,1)
  same => n,GotoIf($["${VOSK_INTENT}"="DUDA"]?manejar-reintento,1)
  same => n,GotoIf($["${VOSK_INTENT}"="SILENCIO"]?manejar-reintento,1)
+ same => n,Goto(manejar-reintento,1)
+
+exten => validar-transferencia,1,GotoIf($["${VOSK_SOURCE}"="dtmf"]?transferir-abogado,1)
+ same => n,GotoIf($[${VOSK_CONFIDENCE} >= ${TRANSFER_MIN_CONFIDENCE}]?transferir-abogado,1)
+ same => n,NoOp(Confianza insuficiente para transferir: ${VOSK_CONFIDENCE})
  same => n,Goto(manejar-reintento,1)
 
 exten => manejar-reintento,1,Set(TRY=$[${TRY}+1])
@@ -32,14 +40,43 @@ exten => reintento,1,Playback(custom/no-entendi)
  same => n,Goto(s,start)
 
 exten => transferir-abogado,1,Playback(custom/lo-comunico)
- same => n,Goto(default,INGROUP_ABOGADOS,1)
+ same => n,Goto(vicidial-cobranza-transfer,s,1)
 
 exten => finalizar,1,Playback(custom/mensaje-final)
  same => n,Hangup()
 
-; Sugerencia VICIdial:
-; Si tu flujo legal no se resuelve con Goto(default,INGROUP_ABOGADOS,1),
-; cambia esa linea por la ruta real que use tu operacion:
-; - Goto(<contexto-real>,<extension-real>,1)
-; - Dial(Local/INGROUP_ABOGADOS@default)
-; - o el contexto puente que tu implementacion VICIdial requiera.
+[vicidial-cobranza-transfer]
+exten => s,1,NoOp(Bridge cobranza -> abogados)
+ same => n,Set(__LAWYER_TRANSFER_CONTEXT=${IF($["${LAWYER_TRANSFER_CONTEXT}"=""]?REEMPLAZAR_CONTEXTO_ABOGADOS:${LAWYER_TRANSFER_CONTEXT})})
+ same => n,Set(__LAWYER_TRANSFER_EXTEN=${IF($["${LAWYER_TRANSFER_EXTEN}"=""]?REEMPLAZAR_DESTINO_ABOGADOS:${LAWYER_TRANSFER_EXTEN})})
+ same => n,Set(__LAWYER_TRANSFER_PRIORITY=${IF($["${LAWYER_TRANSFER_PRIORITY}"=""]?1:${LAWYER_TRANSFER_PRIORITY})})
+ same => n,Set(__VICI_ORIG_UNIQUEID=${UNIQUEID})
+ same => n,Set(__VICI_ORIG_CALLERID=${CALLERID(all)})
+ same => n,Set(__VICI_ORIG_CALLERID_NUM=${CALLERID(num)})
+ same => n,Set(__VICI_ORIG_CHANNEL=${CHANNEL})
+ same => n,Set(__VICI_CAMPAIGN_ID=${CAMPAIGN_ID})
+ same => n,Set(__VICI_LEAD_ID=${LEAD_ID})
+ same => n,Set(__VICI_LIST_ID=${LIST_ID})
+ same => n,Set(__VOSK_INTENT=${VOSK_INTENT})
+ same => n,Set(__VOSK_CONFIDENCE=${VOSK_CONFIDENCE})
+ same => n,GotoIf($["${LAWYER_TRANSFER_CONTEXT}"="REEMPLAZAR_CONTEXTO_ABOGADOS"]?fallback,1)
+ same => n,GotoIf($["${LAWYER_TRANSFER_EXTEN}"="REEMPLAZAR_DESTINO_ABOGADOS"]?fallback,1)
+ same => n,Dial(Local/route@vicidial-cobranza-transfer/n,45,g)
+ same => n,GotoIf($["${DIALSTATUS}"="ANSWER"]?done,1)
+ same => n,Goto(fallback,1)
+
+exten => route,1,NoOp(Route to ${LAWYER_TRANSFER_CONTEXT},${LAWYER_TRANSFER_EXTEN},${LAWYER_TRANSFER_PRIORITY})
+ same => n,Goto(${LAWYER_TRANSFER_CONTEXT},${LAWYER_TRANSFER_EXTEN},${LAWYER_TRANSFER_PRIORITY})
+
+exten => done,1,Hangup()
+
+exten => fallback,1,NoOp(Transfer failed or route not configured)
+ same => n,Playback(custom/mensaje-final)
+ same => n,Hangup()
+
+; Notas VICIdial:
+; - Define __LAWYER_TRANSFER_CONTEXT, __LAWYER_TRANSFER_EXTEN y __LAWYER_TRANSFER_PRIORITY
+;   antes de entrar al IVR o en el mismo contexto de campana.
+; - Las variables con doble underscore se heredan al canal Local para preservar contexto.
+; - El sample preserva UNIQUEID, CALLERID, CAMPAIGN_ID, LEAD_ID y LIST_ID como ejemplos comunes.
+; - Agrega otras variables de tu entorno VICIdial si tu reporteria o callbacks las necesitan.

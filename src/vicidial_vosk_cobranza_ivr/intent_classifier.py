@@ -66,16 +66,9 @@ class IntentClassifier:
         transcript: str | None = None,
         dtmf: str | None = None,
     ) -> IntentClassification:
-        if dtmf:
-            normalized_dtmf = dtmf.strip()
-            if normalized_dtmf in self.dtmf_map:
-                return IntentClassification(
-                    intent=self.dtmf_map[normalized_dtmf],
-                    transcript=transcript or "",
-                    matched_value=normalized_dtmf,
-                    source="dtmf",
-                    confidence=1.0,
-                )
+        dtmf_classification = self.classify_dtmf(dtmf)
+        if dtmf_classification is not None:
+            return dtmf_classification
 
         normalized_text = normalize_text(transcript or "")
         if not normalized_text:
@@ -138,6 +131,22 @@ class IntentClassifier:
             matched_value=None,
             source="default",
             confidence=0.35,
+        )
+
+    def classify_dtmf(self, dtmf: str | None) -> IntentClassification | None:
+        if not dtmf:
+            return None
+
+        normalized_dtmf = dtmf.strip()
+        if normalized_dtmf not in self.dtmf_map:
+            return None
+
+        return IntentClassification(
+            intent=self.dtmf_map[normalized_dtmf],
+            transcript="",
+            matched_value=normalized_dtmf,
+            source="dtmf",
+            confidence=1.0,
         )
 
     def _find_best_match(self, normalized_text: str, intent: Intent) -> PhraseMatch | None:

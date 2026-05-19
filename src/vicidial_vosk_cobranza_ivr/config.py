@@ -23,6 +23,11 @@ class RuntimePaths:
 
 
 @dataclass(frozen=True)
+class AudioSettings:
+    min_rms: float
+
+
+@dataclass(frozen=True)
 class IvrSettings:
     listen_seconds: int
     retry_attempts: int
@@ -58,11 +63,15 @@ class LoggingSettings:
     enabled: bool
     log_level: str
     log_path: str
+    log_transcript: bool
     mask_phone_numbers: bool
+    rotate_max_bytes: int
+    rotate_backup_count: int
 
 
 @dataclass(frozen=True)
 class AppConfig:
+    audio: AudioSettings
     ivr: IvrSettings
     asterisk: AsteriskSettings
     vosk: VoskSettings
@@ -75,6 +84,9 @@ def resolve_runtime_paths(
     intents_path: Path | None = None,
     logging_path: Path | None = None,
 ) -> RuntimePaths:
+    # In production the AGI script may be copied to /var/lib/asterisk/agi-bin, so
+    # repo-relative paths stop being reliable. Absolute env overrides keep config,
+    # intents and logging paths stable regardless of where Asterisk executes the AGI.
     return RuntimePaths(
         config_path=_resolve_path(
             config_path,
@@ -101,6 +113,9 @@ def load_app_config(config_path: Path, intents_path: Path) -> AppConfig:
 
     try:
         return AppConfig(
+            audio=AudioSettings(
+                min_rms=float(raw_config.get("audio", {}).get("min_rms", 150.0)),
+            ),
             ivr=IvrSettings(
                 listen_seconds=int(raw_config["ivr"]["listen_seconds"]),
                 retry_attempts=int(raw_config["ivr"]["retry_attempts"]),
@@ -133,7 +148,10 @@ def load_app_config(config_path: Path, intents_path: Path) -> AppConfig:
                 enabled=bool(raw_config["logging"]["enabled"]),
                 log_level=str(raw_config["logging"]["log_level"]).upper(),
                 log_path=str(raw_config["logging"]["log_path"]),
+                log_transcript=bool(raw_config["logging"].get("log_transcript", False)),
                 mask_phone_numbers=bool(raw_config["logging"]["mask_phone_numbers"]),
+                rotate_max_bytes=int(raw_config["logging"].get("rotate_max_bytes", 10485760)),
+                rotate_backup_count=int(raw_config["logging"].get("rotate_backup_count", 10)),
             ),
             intents={
                 str(intent_name).upper(): [str(phrase) for phrase in phrase_list]
@@ -177,8 +195,22 @@ def _apply_env_overrides(config_data: dict[str, Any]) -> None:
         "IVR_LISTEN_SECONDS",
         transform=int,
     )
+    _set_if_env(config_data, ("audio", "min_rms"), "VOSK_MIN_RMS", transform=float)
     _set_if_env(config_data, ("logging", "log_level"), "LOG_LEVEL", transform=str.upper)
     _set_if_env(config_data, ("logging", "log_path"), "LOG_PATH")
+    _set_if_env(config_data, ("logging", "log_transcript"), "LOG_TRANSCRIPT", transform=_parse_bool)
+    _set_if_env(
+        config_data,
+        ("logging", "rotate_max_bytes"),
+        "LOG_ROTATE_MAX_BYTES",
+        transform=int,
+    )
+    _set_if_env(
+        config_data,
+        ("logging", "rotate_backup_count"),
+        "LOG_ROTATE_BACKUP_COUNT",
+        transform=int,
+    )
 
 
 def _set_if_env(
@@ -187,6 +219,9 @@ def _set_if_env(
     env_name: str,
     transform: Callable[[str], Any] | None = None,
 ) -> None:
+    if path_segments[0] not in config_data or not isinstance(config_data[path_segments[0]], dict):
+        config_data[path_segments[0]] = {}
+
     env_value = os.getenv(env_name)
     if env_value is None:
         return
@@ -197,3 +232,12 @@ def _set_if_env(
         value = env_value
 
     config_data[path_segments[0]][path_segments[1]] = value
+
+
+def _parse_bool(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigError(f"Valor booleano invalido: {value}")

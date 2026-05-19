@@ -97,7 +97,13 @@ Mira `.env.example`. Las mas importantes:
 - `VOSK_COBRANZA_INTENTS`
 - `VOSK_COBRANZA_LOGGING`
 - `VOSK_WEBSOCKET_URL`
+- `VOSK_MIN_RMS`
 - `LOG_PATH`
+- `LOG_TRANSCRIPT`
+
+En produccion usa rutas absolutas en `VOSK_COBRANZA_CONFIG`, `VOSK_COBRANZA_INTENTS` y
+`VOSK_COBRANZA_LOGGING`. Si el AGI se copia a `/var/lib/asterisk/agi-bin/`, esas rutas evitan
+depender de la ubicacion fisica del script para encontrar `config/` y `src/`.
 
 ## Integracion con Asterisk
 
@@ -105,12 +111,16 @@ Mira `.env.example`. Las mas importantes:
 - Luego ejecuta `EAGI(vosk_cobranza.py,${COBRANZA_DTMF})`.
 - El script devuelve `VOSK_INTENT`.
 - El dialplan decide si transfiere, repite o finaliza.
+- La recomendacion actual es transferir a traves de `vicidial-cobranza-transfer` usando `LAWYER_TRANSFER_CONTEXT`, `LAWYER_TRANSFER_EXTEN` y `LAWYER_TRANSFER_PRIORITY`.
 
 Hay un ejemplo completo en [asterisk/extensions_custom.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_custom.conf.sample).
 
 ## Advertencias de produccion
 
 - No dejes el log dentro del repo en un servidor productivo.
+- `logging.log_transcript` viene en `false` por defecto. Activalo solo para diagnostico controlado.
+- Los logs rotan por `RotatingFileHandler` de forma local con el default `10 MB x 10` archivos.
+- El masking de logs cubre telefonos, correos, identificaciones largas y montos, pero igual debes restringir acceso al archivo.
 - Usa prompts WAV 8 kHz, mono, PCM 16-bit.
 - Ajusta el modelo de Vosk al espanol real de tu cartera.
 - Valida CPU, RAM y latencia antes de enrutar trafico real.

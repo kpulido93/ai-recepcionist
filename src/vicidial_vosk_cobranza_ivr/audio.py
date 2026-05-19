@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import os
 import select
+import struct
 import time
 import wave
 from dataclasses import dataclass
+from math import sqrt
 from pathlib import Path
 
 
@@ -16,6 +18,19 @@ class AudioFormatError(RuntimeError):
 class AudioPacket:
     audio_bytes: bytes
     sample_rate: int
+
+
+def calculate_rms(audio_bytes: bytes) -> float:
+    if len(audio_bytes) < 2:
+        return 0.0
+
+    frame_count = len(audio_bytes) // 2
+    if frame_count == 0:
+        return 0.0
+
+    samples = struct.unpack(f"<{frame_count}h", audio_bytes[: frame_count * 2])
+    square_sum = sum(sample * sample for sample in samples)
+    return float(sqrt(square_sum / frame_count))
 
 
 def read_wave_file(path: Path) -> AudioPacket:

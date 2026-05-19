@@ -42,10 +42,11 @@ Revisa:
 - que el canal entregue audio lineal a fd 3
 - que el host corra Linux; la captura EAGI de esta V1 no esta pensada para Windows
 
-## El log muestra telefonos completos
+## El log muestra datos sensibles completos
 
 Revisa:
 
 - `logging.mask_phone_numbers: true`
+- `logging.log_transcript: false` fuera de diagnosticos puntuales
 - `config/logging.yml` con filtro `phone_mask`
 - que no exista otro proceso escribiendo sin pasar por el logger del proyecto

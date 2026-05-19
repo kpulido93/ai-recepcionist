@@ -15,6 +15,8 @@ def test_load_app_config_reads_yaml(tmp_path: Path) -> None:
     write_text(
         config_path,
         """
+audio:
+  min_rms: 175.0
 ivr:
   listen_seconds: 5
   retry_attempts: 1
@@ -42,7 +44,10 @@ logging:
   enabled: true
   log_level: "INFO"
   log_path: "./logs/test.log"
+  log_transcript: false
   mask_phone_numbers: true
+  rotate_max_bytes: 2048
+  rotate_backup_count: 3
 """.strip(),
     )
     write_text(
@@ -57,9 +62,13 @@ SILENCIO: []
 
     config = load_app_config(config_path, intents_path)
 
+    assert config.audio.min_rms == 175.0
     assert config.ivr.listen_seconds == 5
     assert config.vosk.websocket_url == "ws://127.0.0.1:2700"
     assert config.intents["SI"] == ["si"]
+    assert config.logging.log_transcript is False
+    assert config.logging.rotate_max_bytes == 2048
+    assert config.logging.rotate_backup_count == 3
 
 
 def test_load_app_config_applies_env_overrides(
@@ -71,6 +80,8 @@ def test_load_app_config_applies_env_overrides(
     write_text(
         config_path,
         """
+audio:
+  min_rms: 175.0
 ivr:
   listen_seconds: 4
   retry_attempts: 1
@@ -98,7 +109,10 @@ logging:
   enabled: true
   log_level: "INFO"
   log_path: "./logs/test.log"
+  log_transcript: false
   mask_phone_numbers: true
+  rotate_max_bytes: 2048
+  rotate_backup_count: 3
 """.strip(),
     )
     write_text(
@@ -112,8 +126,14 @@ SILENCIO: []
     )
     monkeypatch.setenv("VOSK_WEBSOCKET_URL", "ws://10.20.30.40:2700")
     monkeypatch.setenv("IVR_LISTEN_SECONDS", "3")
+    monkeypatch.setenv("VOSK_MIN_RMS", "210.5")
+    monkeypatch.setenv("LOG_TRANSCRIPT", "true")
+    monkeypatch.setenv("LOG_ROTATE_MAX_BYTES", "4096")
 
     config = load_app_config(config_path, intents_path)
 
+    assert config.audio.min_rms == 210.5
     assert config.vosk.websocket_url == "ws://10.20.30.40:2700"
     assert config.ivr.listen_seconds == 3
+    assert config.logging.log_transcript is True
+    assert config.logging.rotate_max_bytes == 4096

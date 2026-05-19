@@ -3,13 +3,15 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from vicidial_vosk_cobranza_ivr.audio import calculate_rms
 from vicidial_vosk_cobranza_ivr.config import AppConfig
 from vicidial_vosk_cobranza_ivr.intent_classifier import (
     Intent,
     IntentClassification,
     IntentClassifier,
+    normalize_text,
 )
-from vicidial_vosk_cobranza_ivr.vosk_client import VoskClient, VoskConnectionError
+from vicidial_vosk_cobranza_ivr.vosk_client import VoskClient, VoskError
 
 
 @dataclass(frozen=True)
@@ -17,6 +19,8 @@ class ProcessingOutcome:
     intent: Intent
     transcript: str
     source: str
+    confidence: float
+    matched_value: str | None = None
     dtmf: str | None = None
 
 
@@ -39,36 +43,83 @@ class CobranzaIvrService:
         sample_rate: int,
         dtmf: str | None = None,
     ) -> ProcessingOutcome:
-        if dtmf:
-            classification = self.classifier.classify(dtmf=dtmf)
-            return _build_outcome(classification, dtmf=dtmf)
+        dtmf_classification = self.classifier.classify_dtmf(dtmf)
+        if dtmf_classification is not None:
+            return _build_outcome(
+                classification=dtmf_classification,
+                source="dtmf",
+                confidence=dtmf_classification.confidence,
+                dtmf=dtmf,
+            )
 
-        if not audio_bytes:
-            classification = self.classifier.classify(transcript="")
-            return _build_outcome(classification)
+        audio_rms = calculate_rms(audio_bytes)
+        if not audio_bytes or audio_rms < self.config.audio.min_rms:
+            return ProcessingOutcome(
+                intent=Intent.SILENCIO,
+                transcript="",
+                source="silence",
+                confidence=0.0,
+                matched_value=None,
+                dtmf=None,
+            )
 
         try:
             recognition = self.vosk_client.transcribe_pcm(audio_bytes, sample_rate)
-        except VoskConnectionError as exc:
-            self.logger.warning("Fallo Vosk, usando default_intent: %s", exc)
+        except VoskError as exc:
+            self.logger.warning("Fallo Vosk, usando source=error: %s", exc)
             return ProcessingOutcome(
                 intent=Intent(self.config.ivr.default_intent),
                 transcript="",
-                source="vosk_error",
+                source="error",
+                confidence=0.0,
+                matched_value=None,
                 dtmf=None,
             )
 
         classification = self.classifier.classify(transcript=recognition.transcript)
-        return _build_outcome(classification)
+        source = "silence" if classification.intent is Intent.SILENCIO else "speech"
+        confidence = _resolve_confidence(
+            classifier_confidence=classification.confidence,
+            recognition_confidence=recognition.confidence,
+            source=source,
+        )
+        transcript = "" if source == "silence" else normalize_text(recognition.transcript)
+        return _build_outcome(
+            classification=IntentClassification(
+                intent=classification.intent,
+                transcript=transcript,
+                matched_value=classification.matched_value,
+                source=classification.source,
+                confidence=classification.confidence,
+            ),
+            source=source,
+            confidence=confidence,
+        )
 
 
 def _build_outcome(
     classification: IntentClassification,
+    source: str,
+    confidence: float,
     dtmf: str | None = None,
 ) -> ProcessingOutcome:
     return ProcessingOutcome(
         intent=classification.intent,
         transcript=classification.transcript,
-        source=classification.source,
+        source=source,
+        confidence=confidence,
+        matched_value=classification.matched_value,
         dtmf=dtmf,
     )
+
+
+def _resolve_confidence(
+    classifier_confidence: float,
+    recognition_confidence: float | None,
+    source: str,
+) -> float:
+    if source == "silence":
+        return 0.0
+    if recognition_confidence is None:
+        return classifier_confidence
+    return min(classifier_confidence, recognition_confidence)
