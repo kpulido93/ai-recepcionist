@@ -1,0 +1,45 @@
+; Asterisk 18 sample dialplan for local Vosk cobranza IVR.
+; Ajusta este archivo antes de usarlo en Issabel 5 / VICIdial v12.
+;
+; Puntos que debes revisar para VICIdial:
+; - Sustituir los audios `custom/...` por tus prompts reales.
+; - Cambiar `default` si tu transferencia vive en otro contexto.
+; - Cambiar `INGROUP_ABOGADOS` por la extension, Local/ o ruta VICIdial real.
+; - Si VICIdial ya recoge DTMF antes, puedes pasar ese valor al EAGI como argumento.
+
+[ivr-cobranza-vosk]
+exten => s,1,Answer()
+ same => n,Set(TRY=0)
+ same => n,Playback(custom/mensaje-cobranza)
+ same => n(start),Playback(custom/pregunta-abogado)
+ same => n,Read(OPCION,,1,,1,3)
+ same => n,GotoIf($["${OPCION}"="1"]?transferir-abogado,1)
+ same => n,GotoIf($["${OPCION}"="2"]?finalizar,1)
+ same => n,EAGI(vosk_cobranza.py)
+ same => n,NoOp(Vosk texto: ${VOSK_TEXT})
+ same => n,NoOp(Vosk intent: ${VOSK_INTENT})
+ same => n,GotoIf($["${VOSK_INTENT}"="SI"]?transferir-abogado,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="NO"]?finalizar,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="DUDA"]?manejar-reintento,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="SILENCIO"]?manejar-reintento,1)
+ same => n,Goto(manejar-reintento,1)
+
+exten => manejar-reintento,1,Set(TRY=$[${TRY}+1])
+ same => n,GotoIf($[${TRY}<=1]?reintento,1)
+ same => n,Goto(finalizar,1)
+
+exten => reintento,1,Playback(custom/no-entendi)
+ same => n,Goto(s,start)
+
+exten => transferir-abogado,1,Playback(custom/lo-comunico)
+ same => n,Goto(default,INGROUP_ABOGADOS,1)
+
+exten => finalizar,1,Playback(custom/mensaje-final)
+ same => n,Hangup()
+
+; Sugerencia VICIdial:
+; Si tu flujo legal no se resuelve con Goto(default,INGROUP_ABOGADOS,1),
+; cambia esa linea por la ruta real que use tu operacion:
+; - Goto(<contexto-real>,<extension-real>,1)
+; - Dial(Local/INGROUP_ABOGADOS@default)
+; - o el contexto puente que tu implementacion VICIdial requiera.

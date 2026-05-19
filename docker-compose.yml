@@ -1,18 +1,21 @@
 services:
-  admin-api:
-    build:
-      context: .
-    command: uvicorn src.ai_recepcionista.api.app:app --host 0.0.0.0 --port 8000
-    env_file:
-      - .env.example
+  vosk-server:
+    image: alphacep/kaldi-es:latest
+    container_name: vosk-server
+    restart: unless-stopped
+    working_dir: /opt/vosk-server/websocket
+    command: ["python3", "./asr_server.py", "/opt/model"]
     ports:
-      - "8000:8000"
-    restart: unless-stopped
-
-  ari-worker:
-    build:
-      context: .
-    command: ari-worker
-    env_file:
-      - .env.example
-    restart: unless-stopped
+      - "${VOSK_PORT:-2700}:2700"
+    volumes:
+      - ./models/model:/opt/model:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import socket; sock = socket.create_connection(('127.0.0.1', 2700), 2); sock.close()\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
