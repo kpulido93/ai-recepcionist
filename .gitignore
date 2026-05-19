@@ -1,12 +1,12 @@
 .env
 .venv/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
 __pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.pyc
-*.pyo
-*.pyd
 build/
 dist/
 *.egg-info/
+logs/*.log
+models/

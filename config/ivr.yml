@@ -1,0 +1,32 @@
+ivr:
+  listen_seconds: 4
+  retry_attempts: 1
+  default_intent: "DUDA"
+  allow_dtmf_fallback: true
+  max_dtmf_wait_ms: 5000
+  dtmf_map:
+    "1": "SI"
+    "2": "NO"
+
+asterisk:
+  app_name: "vicidial-vosk-cobranza-ivr"
+  channel_variable_name: "VOSK_INTENT"
+  transfer_context: "vicidial-transfer"
+  lawyer_destination_type: "ingroup"
+  lawyer_destination: "REEMPLAZAR_INGROUP_ABOGADOS"
+  final_disposition_yes: "VOZ_SI_ABOGADO"
+  final_disposition_no: "VOZ_NO_FINALIZA"
+  final_disposition_unknown: "VOZ_NO_ENTENDIDO"
+
+vosk:
+  websocket_url: "ws://127.0.0.1:2700"
+  sample_rate: 8000
+  audio_format: "s16le"
+  language: "es"
+  websocket_timeout_seconds: 10
+
+logging:
+  enabled: true
+  log_level: "INFO"
+  log_path: "./logs/vosk_cobranza.log"
+  mask_phone_numbers: true

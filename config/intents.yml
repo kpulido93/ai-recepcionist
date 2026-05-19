@@ -1,0 +1,29 @@
+SI:
+  - "si"
+  - "correcto"
+  - "de acuerdo"
+  - "acepto"
+  - "comuniqueme"
+  - "quiero hablar"
+  - "paseme"
+  - "abogado"
+  - "asesor"
+
+NO:
+  - "no"
+  - "ahora no"
+  - "no quiero"
+  - "despues"
+  - "luego"
+  - "no me interesa"
+  - "equivocado"
+
+DUDA:
+  - "no entiendo"
+  - "quien habla"
+  - "que es"
+  - "repita"
+  - "explique"
+  - "no se"
+
+SILENCIO: []

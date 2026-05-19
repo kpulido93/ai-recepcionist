@@ -1,36 +1,30 @@
 # AGENTS.md
 
-## Objetivo del repo
-Construir un microservicio Python para recepcionista digital de cobranza,
-integrado con Issabel/Asterisk + VICIdial.
+## Objetivo
+Construir un IVR de cobranza para VICIdial/Asterisk usando EAGI y Vosk local.
 
-## Arquitectura obligatoria
-- Un solo proceso `ari-worker` dueño del app Stasis `ai-recepcionista`
-- Un proceso separado `admin-api` con FastAPI
-- Media por ARI `externalMedia` usando RTP/UDP
-- Transferencia a agentes por AMI Redirect
-- Sin servicios cloud para STT/TTS en la V1
-- STT principal: Vosk
-- STT fallback: faster-whisper
-- TTS: XTTS-v2 y Chatterbox-Multilingual detrás de una interfaz común
+## Alcance V1
+- Un script EAGI principal para clasificar respuestas de voz o DTMF.
+- STT local por Vosk Server via WebSocket.
+- Configuracion externa en YAML.
+- Pruebas locales con archivos WAV antes de conectarlo a Asterisk.
+- Logs con enmascarado de numeros telefonicos.
 
-## Reglas de negocio
-- Guion corto
-- Una sola repregunta
-- Transferir solo con sí explícito
-- Si no hay agente, crear callback
-- Guardar disposición final
-- No negociar dentro del bot
+## Reglas funcionales
+- Clasificar la respuesta como `SI`, `NO`, `DUDA` o `SILENCIO`.
+- Devolver `VOSK_INTENT` como variable de canal.
+- No hardcodear destinos reales de Asterisk o VICIdial.
+- Permitir un solo reintento desde el dialplan.
 
 ## Calidad
-Antes de cerrar cada hito:
-- correr `ruff check .`
-- correr `ruff format --check .`
-- correr `mypy src`
-- correr `pytest -q`
+Antes de cerrar cambios:
+- `ruff check .`
+- `ruff format --check .`
+- `mypy src`
+- `pytest -q`
 
 ## Restricciones
-- No romper compatibilidad con Asterisk 16/18
-- No usar chan_websocket para media
-- No meter el cliente ARI dentro de FastAPI workers
-- Mantener diffs pequeños y por hito
+- Python 3.10 o superior.
+- Sin credenciales reales.
+- Mantener el codigo simple, mantenible y documentado.
+- Mantener diffs pequenos y por hito.
