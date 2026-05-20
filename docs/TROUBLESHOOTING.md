@@ -42,6 +42,26 @@ Revisa:
 - que el canal entregue audio lineal a fd 3
 - que el host corra Linux; la captura EAGI de esta V1 no esta pensada para Windows
 
+## Necesito revisar el audio crudo de EAGI
+
+Para diagnostico puntual puedes activar en `config/ivr.yml`:
+
+```yaml
+debug:
+  audio_dump_enabled: true
+  audio_dump_dir: /tmp
+```
+
+Con eso el AGI guarda audio raw por llamada con nombre seguro y registra la ruta del archivo en el log.
+
+Para convertir un dump a WAV:
+
+```bash
+ffmpeg -f s16le -ar 8000 -ac 1 -i /tmp/eagi-archivo.raw output.wav
+```
+
+Al terminar el diagnostico vuelve a `false` para no retener audio innecesario.
+
 ## El log muestra datos sensibles completos
 
 Revisa:

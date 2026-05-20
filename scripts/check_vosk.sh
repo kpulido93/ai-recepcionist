@@ -16,5 +16,6 @@ port = url.port or 2700
 
 sock = socket.create_connection((host, port), 2)
 sock.close()
-print(f"OK: Vosk escucha en {host}:{port}")
+print(f"OK: socket TCP de Vosk accesible en {host}:{port}")
+print("INFO: este check solo valida conectividad al puerto, no reconocimiento real.")
 PY

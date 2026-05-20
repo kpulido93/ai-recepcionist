@@ -1,0 +1,217 @@
+- text: ""
+  expected_intent: "SILENCIO"
+  notes: "Caso vacio"
+
+- text: "   "
+  expected_intent: "SILENCIO"
+  notes: "Solo espacios"
+
+- text: "si"
+  expected_intent: "SI"
+
+- text: "sí"
+  expected_intent: "SI"
+
+- text: "claro"
+  expected_intent: "SI"
+
+- text: "dale"
+  expected_intent: "SI"
+
+- text: "ta bien"
+  expected_intent: "SI"
+
+- text: "está bien"
+  expected_intent: "SI"
+
+- text: "correcto"
+  expected_intent: "SI"
+
+- text: "de acuerdo"
+  expected_intent: "SI"
+
+- text: "transfierame"
+  expected_intent: "SI"
+
+- text: "transfiérame"
+  expected_intent: "SI"
+
+- text: "pasame"
+  expected_intent: "SI"
+
+- text: "comuníqueme"
+  expected_intent: "SI"
+
+- text: "quiero saber que me estan cobrando"
+  expected_intent: "INFO_COBRO"
+
+- text: "quiero saber qué me están cobrando"
+  expected_intent: "INFO_COBRO"
+
+- text: "que me estan cobrando"
+  expected_intent: "INFO_COBRO"
+
+- text: "qué me están cobrando"
+  expected_intent: "INFO_COBRO"
+
+- text: "que es lo que me estan cobrando"
+  expected_intent: "INFO_COBRO"
+
+- text: "cuanto debo"
+  expected_intent: "INFO_COBRO"
+
+- text: "cuánto debo"
+  expected_intent: "INFO_COBRO"
+
+- text: "cual es el monto"
+  expected_intent: "INFO_COBRO"
+
+- text: "de que es esa deuda"
+  expected_intent: "INFO_COBRO"
+
+- text: "explícame ese cobro"
+  expected_intent: "INFO_COBRO"
+
+- text: "quiero pagar"
+  expected_intent: "PROMESA_PAGO"
+
+- text: "quiero resolver"
+  expected_intent: "PROMESA_PAGO"
+
+- text: "quiero ponerme al dia"
+  expected_intent: "PROMESA_PAGO"
+
+- text: "quiero ponerme al día"
+  expected_intent: "PROMESA_PAGO"
+
+- text: "quiero hacer un acuerdo"
+  expected_intent: "PROMESA_PAGO"
+
+- text: "quiero llegar a un acuerdo"
+  expected_intent: "PROMESA_PAGO"
+
+- text: "puedo pagar hoy"
+  expected_intent: "PROMESA_PAGO"
+
+- text: "voy a pagar"
+  expected_intent: "PROMESA_PAGO"
+
+- text: "no"
+  expected_intent: "NO"
+
+- text: "no quiero"
+  expected_intent: "NO"
+
+- text: "no me interesa"
+  expected_intent: "NO"
+
+- text: "no me transfiera"
+  expected_intent: "NO"
+
+- text: "ahora no"
+  expected_intent: "NO"
+
+- text: "despues"
+  expected_intent: "NO"
+
+- text: "después"
+  expected_intent: "NO"
+
+- text: "mas tarde"
+  expected_intent: "NO"
+
+- text: "más tarde"
+  expected_intent: "NO"
+
+- text: "no puedo ahora"
+  expected_intent: "NO"
+
+- text: "llameme despues"
+  expected_intent: "CALLBACK"
+
+- text: "llámeme después"
+  expected_intent: "CALLBACK"
+
+- text: "llamenme luego"
+  expected_intent: "CALLBACK"
+
+- text: "llámenme luego"
+  expected_intent: "CALLBACK"
+
+- text: "ahora estoy ocupado"
+  expected_intent: "CALLBACK"
+
+- text: "estoy trabajando"
+  expected_intent: "CALLBACK"
+
+- text: "numero equivocado"
+  expected_intent: "NUMERO_EQUIVOCADO"
+
+- text: "número equivocado"
+  expected_intent: "NUMERO_EQUIVOCADO"
+
+- text: "equivocado"
+  expected_intent: "NUMERO_EQUIVOCADO"
+
+- text: "aqui no vive"
+  expected_intent: "NUMERO_EQUIVOCADO"
+
+- text: "este no es su numero"
+  expected_intent: "NUMERO_EQUIVOCADO"
+
+- text: "no soy esa persona"
+  expected_intent: "NO_ES_PERSONA"
+
+- text: "no conozco esa persona"
+  expected_intent: "NO_ES_PERSONA"
+
+- text: "no la conozco"
+  expected_intent: "NO_ES_PERSONA"
+
+- text: "no lo conozco"
+  expected_intent: "NO_ES_PERSONA"
+
+- text: "no conozco esa deuda"
+  expected_intent: "NO_ES_PERSONA"
+
+- text: "no entiendo"
+  expected_intent: "DUDA"
+
+- text: "quien habla"
+  expected_intent: "DUDA"
+
+- text: "quién habla"
+  expected_intent: "DUDA"
+
+- text: "repita"
+  expected_intent: "DUDA"
+
+- text: "explique"
+  expected_intent: "DUDA"
+
+- text: "que es esto"
+  expected_intent: "DUDA"
+
+- text: "silla"
+  expected_intent: "DUDA"
+  notes: "Anti falso positivo para SI"
+
+- text: "noticia"
+  expected_intent: "DUDA"
+  notes: "Anti falso positivo para NO"
+
+- text: "sino"
+  expected_intent: "DUDA"
+  notes: "No debe disparar SI ni NO"
+
+- text: "el periodico"
+  expected_intent: "DUDA"
+  notes: "Frase neutra sin intent"
+
+- text: "se mala"
+  expected_intent: "DUDA"
+  notes: "No debe activar SI"
+
+- text: "es decir flip"
+  expected_intent: "DUDA"
+  notes: "Ruido o relleno conversacional"

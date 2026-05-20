@@ -1,0 +1,79 @@
+; Asterisk dialplan sample para laboratorio local.
+; Objetivo:
+; - Flujo principal voice-first con EAGI.
+; - Transferencia local a la extension 1002 cuando la intencion es afirmativa.
+; - INFO_COBRO indica interes en conocer el detalle del cobro o la deuda.
+; - En laboratorio, INFO_COBRO y PROMESA_PAGO se transfieren igual que SI.
+; - Un solo reintento para DUDA o SILENCIO.
+; - Sin ingroups reales ni dependencias de VICIdial.
+; - Sin "lo comunico" por defecto para reducir latencia.
+
+[lab-phones]
+exten => 1001,1,Dial(PJSIP/1001,20)
+ same => n,Hangup()
+
+exten => 1002,1,Dial(PJSIP/1002,20)
+ same => n,Hangup()
+
+exten => 9900,1,Goto(ivr-cobranza-vosk,s,1)
+
+[ivr-cobranza-vosk]
+exten => s,1,NoOp(Inicio IVR cobranza Vosk laboratorio)
+ same => n,Answer()
+ same => n,Set(TRY=0)
+ same => n,Set(MAX_RETRIES=1)
+ same => n,Playback(custom/mensaje-cobranza)
+
+ same => n(start),Set(VOSK_TEXT=)
+ same => n,Set(VOSK_INTENT=)
+ same => n,Set(VOSK_CONFIDENCE=)
+ same => n,Set(VOSK_SOURCE=)
+ ; Prompt recomendado voice-first:
+ ; "¿Lo transfiero ahora? Le escucho."
+ ; Si tu canal o softphone no permite barge-in real sobre Playback(),
+ ; el caller debe responder al terminar el prompt.
+ same => n,Playback(custom/pregunta-abogado)
+
+ ; Fallback DTMF opcional. No es el camino principal del laboratorio.
+ ; same => n,Read(OPCION,,1,,1,1)
+ ; same => n,GotoIf($["${OPCION}"="1"]?transferir-abogado,1)
+ ; same => n,GotoIf($["${OPCION}"="2"]?finalizar,1)
+
+ same => n,EAGI(vosk_cobranza.py)
+ same => n,Set(VOSK_INTENT=${IF($["${VOSK_INTENT}"=""]?DUDA:${VOSK_INTENT})})
+ same => n,Set(VOSK_CONFIDENCE=${IF($["${VOSK_CONFIDENCE}"=""]?0.00:${VOSK_CONFIDENCE})})
+ same => n,Set(VOSK_SOURCE=${IF($["${VOSK_SOURCE}"=""]?speech:${VOSK_SOURCE})})
+ same => n,NoOp(VOSK_TEXT=${VOSK_TEXT} VOSK_INTENT=${VOSK_INTENT} VOSK_CONFIDENCE=${VOSK_CONFIDENCE} VOSK_SOURCE=${VOSK_SOURCE})
+
+ same => n,GotoIf($["${VOSK_INTENT}"="SI"]?transferir-abogado,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="INFO_COBRO"]?transferir-abogado,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="PROMESA_PAGO"]?transferir-abogado,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="NO"]?finalizar,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="CALLBACK"]?documentar-callback,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="NUMERO_EQUIVOCADO"]?documentar-numero-equivocado,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="NO_ES_PERSONA"]?documentar-no-es-persona,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="DUDA"]?manejar-reintento,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="SILENCIO"]?manejar-reintento,1)
+ same => n,Goto(manejar-reintento,1)
+
+exten => manejar-reintento,1,Set(TRY=$[${TRY}+1])
+ same => n,GotoIf($[${TRY} <= ${MAX_RETRIES}]?reintento,1)
+ same => n,Goto(finalizar,1)
+
+exten => reintento,1,Playback(custom/no-entendi)
+ same => n,Goto(s,start)
+
+exten => transferir-abogado,1,Dial(PJSIP/1002,20)
+ same => n,Hangup()
+
+exten => documentar-callback,1,NoOp(Disposition laboratorio CALLBACK; en produccion puede rutear a agenda o callback queue)
+ same => n,Goto(finalizar,1)
+
+exten => documentar-numero-equivocado,1,NoOp(Disposition laboratorio NUMERO_EQUIVOCADO; en produccion puede marcar numero invalido)
+ same => n,Goto(finalizar,1)
+
+exten => documentar-no-es-persona,1,NoOp(Disposition laboratorio NO_ES_PERSONA; en produccion puede marcar tercero o contacto incorrecto)
+ same => n,Goto(finalizar,1)
+
+exten => finalizar,1,Playback(custom/mensaje-final)
+ same => n,Hangup()

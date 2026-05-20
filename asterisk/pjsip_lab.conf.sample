@@ -1,0 +1,58 @@
+; Asterisk PJSIP sample para laboratorio local.
+; Objetivo:
+; - Registrar dos softphones SIP de prueba: 1001 y 1002.
+; - Mantener un contexto aislado de laboratorio.
+; - Evitar secretos reales; reemplaza los passwords placeholder antes de usar.
+
+[transport-udp]
+type=transport
+protocol=udp
+bind=0.0.0.0:5060
+
+[1001]
+type=endpoint
+transport=transport-udp
+context=lab-phones
+disallow=all
+allow=ulaw,alaw
+auth=1001
+aors=1001
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+
+[1001]
+type=auth
+auth_type=userpass
+username=1001
+password=REEMPLAZAR_PASSWORD_1001
+
+[1001]
+type=aor
+max_contacts=1
+remove_existing=yes
+
+[1002]
+type=endpoint
+transport=transport-udp
+context=lab-phones
+disallow=all
+allow=ulaw,alaw
+auth=1002
+aors=1002
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+
+[1002]
+type=auth
+auth_type=userpass
+username=1002
+password=REEMPLAZAR_PASSWORD_1002
+
+[1002]
+type=aor
+max_contacts=1
+remove_existing=yes

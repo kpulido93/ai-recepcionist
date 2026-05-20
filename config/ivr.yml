@@ -1,8 +1,17 @@
 ivr:
-  listen_seconds: 4
+  listen_seconds: 5
+  sample_rate: 8000
   retry_attempts: 1
   default_intent: "DUDA"
   allow_dtmf_fallback: true
+  early_detection_enabled: true
+  early_detection_min_audio_ms: 250
+  early_detection_min_chars: 2
+  vad_enabled: true
+  min_speech_ms: 250
+  silence_after_speech_ms: 700
+  # Umbral RMS simple para voz en 8 kHz/16-bit mono sin DSP pesado.
+  rms_speech_threshold: 250.0
   max_dtmf_wait_ms: 5000
   dtmf_map:
     "1": "SI"
@@ -14,15 +23,16 @@ audio:
 asterisk:
   app_name: "vicidial-vosk-cobranza-ivr"
   channel_variable_name: "VOSK_INTENT"
-  transfer_context: "vicidial-transfer"
+  transfer_context: "REEMPLAZAR_CONTEXTO_TRANSFER"
   lawyer_destination_type: "ingroup"
-  lawyer_destination: "REEMPLAZAR_INGROUP_ABOGADOS"
+  lawyer_destination: "REEMPLAZAR_INGROUP_O_EXTENSION"
   final_disposition_yes: "VOZ_SI_ABOGADO"
   final_disposition_no: "VOZ_NO_FINALIZA"
   final_disposition_unknown: "VOZ_NO_ENTENDIDO"
 
 vosk:
   websocket_url: "ws://127.0.0.1:2700"
+  # Compatibilidad con configuraciones previas; se normaliza desde ivr.sample_rate.
   sample_rate: 8000
   audio_format: "s16le"
   language: "es"
@@ -32,7 +42,12 @@ logging:
   enabled: true
   log_level: "INFO"
   log_path: "./logs/vosk_cobranza.log"
+  # Defaults de privacidad seguros para produccion.
   log_transcript: false
   mask_phone_numbers: true
   rotate_max_bytes: 10485760
   rotate_backup_count: 10
+
+debug:
+  audio_dump_enabled: false
+  audio_dump_dir: "/tmp"

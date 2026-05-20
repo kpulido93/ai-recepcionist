@@ -1,15 +1,21 @@
 services:
   vosk-server:
+    # TODO(produccion): fijar tag o digest inmutable antes de trafico real.
+    # La documentacion oficial de Vosk sigue mostrando ejemplos con :latest.
     image: alphacep/kaldi-es:latest
     container_name: vosk-server
     restart: unless-stopped
     working_dir: /opt/vosk-server/websocket
     command: ["python3", "./asr_server.py", "/opt/model"]
+    # Por defecto solo expone Vosk en loopback local.
+    # Si Vosk va a vivir en otro host, usa red privada, VPN o firewall
+    # restrictivo en lugar de abrir 2700/tcp a Internet.
     ports:
-      - "${VOSK_PORT:-2700}:2700"
+      - "127.0.0.1:${VOSK_PORT:-2700}:2700"
     volumes:
       - ./models/model:/opt/model:ro
     healthcheck:
+      # Healthcheck TCP basico: valida socket, no reconocimiento real.
       test:
         [
           "CMD-SHELL",

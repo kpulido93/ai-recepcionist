@@ -9,6 +9,18 @@ from typing import Any
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_IVR_LISTEN_SECONDS = 5
+DEFAULT_SAMPLE_RATE = 8000
+DEFAULT_EARLY_DETECTION_ENABLED = True
+DEFAULT_EARLY_DETECTION_MIN_AUDIO_MS = 250
+DEFAULT_EARLY_DETECTION_MIN_CHARS = 2
+DEFAULT_VAD_ENABLED = True
+DEFAULT_MIN_SPEECH_MS = 250
+DEFAULT_SILENCE_AFTER_SPEECH_MS = 700
+DEFAULT_RMS_SPEECH_THRESHOLD = 250.0
+DEFAULT_MASK_PHONE_NUMBERS = True
+DEFAULT_DEBUG_AUDIO_DUMP_ENABLED = False
+DEFAULT_DEBUG_AUDIO_DUMP_DIR = "/tmp"
 
 
 class ConfigError(RuntimeError):
@@ -30,9 +42,17 @@ class AudioSettings:
 @dataclass(frozen=True)
 class IvrSettings:
     listen_seconds: int
+    sample_rate: int
     retry_attempts: int
     default_intent: str
     allow_dtmf_fallback: bool
+    early_detection_enabled: bool
+    early_detection_min_audio_ms: int
+    early_detection_min_chars: int
+    vad_enabled: bool
+    min_speech_ms: int
+    silence_after_speech_ms: int
+    rms_speech_threshold: float
     max_dtmf_wait_ms: int
     dtmf_map: dict[str, str]
 
@@ -65,6 +85,8 @@ class LoggingSettings:
     log_path: str
     log_transcript: bool
     mask_phone_numbers: bool
+    debug_audio_dump_enabled: bool
+    debug_audio_dump_dir: str
     rotate_max_bytes: int
     rotate_backup_count: int
 
@@ -110,6 +132,11 @@ def load_app_config(config_path: Path, intents_path: Path) -> AppConfig:
     raw_config = _load_yaml_file(config_path)
     raw_intents = _load_yaml_file(intents_path)
     _apply_env_overrides(raw_config)
+    ivr_config = _get_section(raw_config, "ivr")
+    asterisk_config = _get_section(raw_config, "asterisk")
+    vosk_config = _get_section(raw_config, "vosk")
+    logging_config = _get_section(raw_config, "logging")
+    sample_rate = _resolve_sample_rate(ivr_config, vosk_config)
 
     try:
         return AppConfig(
@@ -117,41 +144,74 @@ def load_app_config(config_path: Path, intents_path: Path) -> AppConfig:
                 min_rms=float(raw_config.get("audio", {}).get("min_rms", 150.0)),
             ),
             ivr=IvrSettings(
-                listen_seconds=int(raw_config["ivr"]["listen_seconds"]),
-                retry_attempts=int(raw_config["ivr"]["retry_attempts"]),
-                default_intent=str(raw_config["ivr"]["default_intent"]).upper(),
-                allow_dtmf_fallback=bool(raw_config["ivr"]["allow_dtmf_fallback"]),
-                max_dtmf_wait_ms=int(raw_config["ivr"]["max_dtmf_wait_ms"]),
+                listen_seconds=int(ivr_config.get("listen_seconds", DEFAULT_IVR_LISTEN_SECONDS)),
+                sample_rate=sample_rate,
+                retry_attempts=int(ivr_config["retry_attempts"]),
+                default_intent=str(ivr_config["default_intent"]).upper(),
+                allow_dtmf_fallback=bool(ivr_config["allow_dtmf_fallback"]),
+                early_detection_enabled=bool(
+                    ivr_config.get("early_detection_enabled", DEFAULT_EARLY_DETECTION_ENABLED)
+                ),
+                early_detection_min_audio_ms=int(
+                    ivr_config.get(
+                        "early_detection_min_audio_ms",
+                        DEFAULT_EARLY_DETECTION_MIN_AUDIO_MS,
+                    )
+                ),
+                early_detection_min_chars=int(
+                    ivr_config.get("early_detection_min_chars", DEFAULT_EARLY_DETECTION_MIN_CHARS)
+                ),
+                vad_enabled=bool(ivr_config.get("vad_enabled", DEFAULT_VAD_ENABLED)),
+                min_speech_ms=int(ivr_config.get("min_speech_ms", DEFAULT_MIN_SPEECH_MS)),
+                silence_after_speech_ms=int(
+                    ivr_config.get(
+                        "silence_after_speech_ms",
+                        DEFAULT_SILENCE_AFTER_SPEECH_MS,
+                    )
+                ),
+                rms_speech_threshold=float(
+                    ivr_config.get("rms_speech_threshold", DEFAULT_RMS_SPEECH_THRESHOLD)
+                ),
+                max_dtmf_wait_ms=int(ivr_config["max_dtmf_wait_ms"]),
                 dtmf_map={
-                    str(key): str(value).upper()
-                    for key, value in raw_config["ivr"]["dtmf_map"].items()
+                    str(key): str(value).upper() for key, value in ivr_config["dtmf_map"].items()
                 },
             ),
             asterisk=AsteriskSettings(
-                app_name=str(raw_config["asterisk"]["app_name"]),
-                channel_variable_name=str(raw_config["asterisk"]["channel_variable_name"]),
-                transfer_context=str(raw_config["asterisk"]["transfer_context"]),
-                lawyer_destination_type=str(raw_config["asterisk"]["lawyer_destination_type"]),
-                lawyer_destination=str(raw_config["asterisk"]["lawyer_destination"]),
-                final_disposition_yes=str(raw_config["asterisk"]["final_disposition_yes"]),
-                final_disposition_no=str(raw_config["asterisk"]["final_disposition_no"]),
-                final_disposition_unknown=str(raw_config["asterisk"]["final_disposition_unknown"]),
+                app_name=str(asterisk_config["app_name"]),
+                channel_variable_name=str(asterisk_config["channel_variable_name"]),
+                transfer_context=str(asterisk_config["transfer_context"]),
+                lawyer_destination_type=str(asterisk_config["lawyer_destination_type"]),
+                lawyer_destination=str(asterisk_config["lawyer_destination"]),
+                final_disposition_yes=str(asterisk_config["final_disposition_yes"]),
+                final_disposition_no=str(asterisk_config["final_disposition_no"]),
+                final_disposition_unknown=str(asterisk_config["final_disposition_unknown"]),
             ),
             vosk=VoskSettings(
-                websocket_url=str(raw_config["vosk"]["websocket_url"]),
-                sample_rate=int(raw_config["vosk"]["sample_rate"]),
-                audio_format=str(raw_config["vosk"]["audio_format"]),
-                language=str(raw_config["vosk"]["language"]),
-                websocket_timeout_seconds=int(raw_config["vosk"]["websocket_timeout_seconds"]),
+                websocket_url=str(vosk_config["websocket_url"]),
+                sample_rate=sample_rate,
+                audio_format=str(vosk_config["audio_format"]),
+                language=str(vosk_config["language"]),
+                websocket_timeout_seconds=int(vosk_config["websocket_timeout_seconds"]),
             ),
             logging=LoggingSettings(
-                enabled=bool(raw_config["logging"]["enabled"]),
-                log_level=str(raw_config["logging"]["log_level"]).upper(),
-                log_path=str(raw_config["logging"]["log_path"]),
-                log_transcript=bool(raw_config["logging"].get("log_transcript", False)),
-                mask_phone_numbers=bool(raw_config["logging"]["mask_phone_numbers"]),
-                rotate_max_bytes=int(raw_config["logging"].get("rotate_max_bytes", 10485760)),
-                rotate_backup_count=int(raw_config["logging"].get("rotate_backup_count", 10)),
+                enabled=bool(logging_config["enabled"]),
+                log_level=str(logging_config["log_level"]).upper(),
+                log_path=str(logging_config["log_path"]),
+                log_transcript=bool(logging_config.get("log_transcript", False)),
+                mask_phone_numbers=bool(
+                    logging_config.get("mask_phone_numbers", DEFAULT_MASK_PHONE_NUMBERS)
+                ),
+                debug_audio_dump_enabled=_resolve_debug_audio_dump_enabled(
+                    raw_config,
+                    logging_config,
+                ),
+                debug_audio_dump_dir=_resolve_debug_audio_dump_dir(
+                    raw_config,
+                    logging_config,
+                ),
+                rotate_max_bytes=int(logging_config.get("rotate_max_bytes", 10485760)),
+                rotate_backup_count=int(logging_config.get("rotate_backup_count", 10)),
             ),
             intents={
                 str(intent_name).upper(): [str(phrase) for phrase in phrase_list]
@@ -187,8 +247,14 @@ def _load_yaml_file(path: Path) -> dict[str, Any]:
 
 
 def _apply_env_overrides(config_data: dict[str, Any]) -> None:
+    _set_sample_rate_from_env(config_data)
     _set_if_env(config_data, ("vosk", "websocket_url"), "VOSK_WEBSOCKET_URL")
-    _set_if_env(config_data, ("vosk", "sample_rate"), "VOSK_SAMPLE_RATE", transform=int)
+    _set_if_env(
+        config_data,
+        ("vosk", "websocket_timeout_seconds"),
+        "VOSK_WEBSOCKET_TIMEOUT_SECONDS",
+        transform=int,
+    )
     _set_if_env(
         config_data,
         ("ivr", "listen_seconds"),
@@ -213,15 +279,60 @@ def _apply_env_overrides(config_data: dict[str, Any]) -> None:
     )
 
 
+def _get_section(config_data: dict[str, Any], section_name: str) -> dict[str, Any]:
+    section = config_data.get(section_name, {})
+    if not isinstance(section, dict):
+        raise ConfigError(f"La seccion '{section_name}' debe ser un objeto YAML.")
+    return section
+
+
+def _resolve_sample_rate(ivr_config: dict[str, Any], vosk_config: dict[str, Any]) -> int:
+    return int(ivr_config.get("sample_rate", vosk_config.get("sample_rate", DEFAULT_SAMPLE_RATE)))
+
+
+def _resolve_debug_audio_dump_enabled(
+    config_data: dict[str, Any],
+    logging_config: dict[str, Any],
+) -> bool:
+    debug_config = _get_section(config_data, "debug")
+    if "audio_dump_enabled" in debug_config:
+        return bool(debug_config["audio_dump_enabled"])
+    return bool(
+        logging_config.get(
+            "debug_audio_dump_enabled",
+            DEFAULT_DEBUG_AUDIO_DUMP_ENABLED,
+        )
+    )
+
+
+def _resolve_debug_audio_dump_dir(
+    config_data: dict[str, Any],
+    logging_config: dict[str, Any],
+) -> str:
+    debug_config = _get_section(config_data, "debug")
+    if "audio_dump_dir" in debug_config:
+        return str(debug_config["audio_dump_dir"])
+    return str(logging_config.get("debug_audio_dump_dir", DEFAULT_DEBUG_AUDIO_DUMP_DIR))
+
+
+def _set_sample_rate_from_env(config_data: dict[str, Any]) -> None:
+    env_value = os.getenv("IVR_SAMPLE_RATE")
+    if env_value is None:
+        env_value = os.getenv("VOSK_SAMPLE_RATE")
+    if env_value is None:
+        return
+
+    sample_rate = int(env_value)
+    _set_config_value(config_data, ("ivr", "sample_rate"), sample_rate)
+    _set_config_value(config_data, ("vosk", "sample_rate"), sample_rate)
+
+
 def _set_if_env(
     config_data: dict[str, Any],
     path_segments: tuple[str, str],
     env_name: str,
     transform: Callable[[str], Any] | None = None,
 ) -> None:
-    if path_segments[0] not in config_data or not isinstance(config_data[path_segments[0]], dict):
-        config_data[path_segments[0]] = {}
-
     env_value = os.getenv(env_name)
     if env_value is None:
         return
@@ -231,7 +342,19 @@ def _set_if_env(
     else:
         value = env_value
 
-    config_data[path_segments[0]][path_segments[1]] = value
+    _set_config_value(config_data, path_segments, value)
+
+
+def _set_config_value(
+    config_data: dict[str, Any],
+    path_segments: tuple[str, str],
+    value: Any,
+) -> None:
+    section = config_data.get(path_segments[0])
+    if not isinstance(section, dict):
+        section = {}
+        config_data[path_segments[0]] = section
+    section[path_segments[1]] = value
 
 
 def _parse_bool(value: str) -> bool:

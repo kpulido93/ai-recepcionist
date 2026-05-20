@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from vicidial_vosk_cobranza_ivr.audio import calculate_rms
 from vicidial_vosk_cobranza_ivr.config import AppConfig
@@ -9,19 +10,24 @@ from vicidial_vosk_cobranza_ivr.intent_classifier import (
     Intent,
     IntentClassification,
     IntentClassifier,
+    IntentName,
+    intent_equals,
     normalize_text,
+    resolve_intent_name,
 )
 from vicidial_vosk_cobranza_ivr.vosk_client import VoskClient, VoskError
 
 
 @dataclass(frozen=True)
 class ProcessingOutcome:
-    intent: Intent
+    intent: IntentName
     transcript: str
     source: str
     confidence: float
+    finish_reason: str
     matched_value: str | None = None
     dtmf: str | None = None
+    raw_messages: tuple[dict[str, Any], ...] = ()
 
 
 class CobranzaIvrService:
@@ -49,6 +55,7 @@ class CobranzaIvrService:
                 classification=dtmf_classification,
                 source="dtmf",
                 confidence=dtmf_classification.confidence,
+                finish_reason="dtmf",
                 dtmf=dtmf,
             )
 
@@ -59,8 +66,10 @@ class CobranzaIvrService:
                 transcript="",
                 source="silence",
                 confidence=0.0,
+                finish_reason="no_audio",
                 matched_value=None,
                 dtmf=None,
+                raw_messages=(),
             )
 
         try:
@@ -68,16 +77,36 @@ class CobranzaIvrService:
         except VoskError as exc:
             self.logger.warning("Fallo Vosk, usando source=error: %s", exc)
             return ProcessingOutcome(
-                intent=Intent(self.config.ivr.default_intent),
+                intent=resolve_intent_name(self.config.ivr.default_intent),
                 transcript="",
                 source="error",
                 confidence=0.0,
+                finish_reason="error",
                 matched_value=None,
                 dtmf=None,
+                raw_messages=(),
+            )
+
+        if recognition.early_intent:
+            early_intent = resolve_intent_name(recognition.early_intent)
+            transcript = normalize_text(recognition.transcript)
+            confidence = recognition.confidence if recognition.confidence is not None else 0.9
+            return _build_outcome(
+                classification=IntentClassification(
+                    intent=early_intent,
+                    transcript=transcript,
+                    matched_value=recognition.early_matched_phrase,
+                    source="early_detection",
+                    confidence=confidence,
+                ),
+                source="speech",
+                confidence=confidence,
+                finish_reason=recognition.finish_reason,
+                raw_messages=tuple(recognition.raw_messages),
             )
 
         classification = self.classifier.classify(transcript=recognition.transcript)
-        source = "silence" if classification.intent is Intent.SILENCIO else "speech"
+        source = "silence" if intent_equals(classification.intent, Intent.SILENCIO) else "speech"
         confidence = _resolve_confidence(
             classifier_confidence=classification.confidence,
             recognition_confidence=recognition.confidence,
@@ -94,6 +123,8 @@ class CobranzaIvrService:
             ),
             source=source,
             confidence=confidence,
+            finish_reason=recognition.finish_reason,
+            raw_messages=tuple(recognition.raw_messages),
         )
 
 
@@ -101,15 +132,19 @@ def _build_outcome(
     classification: IntentClassification,
     source: str,
     confidence: float,
+    finish_reason: str,
     dtmf: str | None = None,
+    raw_messages: tuple[dict[str, Any], ...] = (),
 ) -> ProcessingOutcome:
     return ProcessingOutcome(
         intent=classification.intent,
         transcript=classification.transcript,
         source=source,
         confidence=confidence,
+        finish_reason=finish_reason,
         matched_value=classification.matched_value,
         dtmf=dtmf,
+        raw_messages=raw_messages,
     )
 
 

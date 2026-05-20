@@ -55,5 +55,12 @@ def main() -> int:
     return run_eagi()
 
 
+def send_audio_to_vosk(websocket: object, audio_chunk: bytes) -> None:
+    _bootstrap_src_path()
+    from vicidial_vosk_cobranza_ivr.vosk_client import send_audio_to_vosk as _send_audio_to_vosk
+
+    _send_audio_to_vosk(websocket, audio_chunk)
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

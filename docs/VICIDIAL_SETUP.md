@@ -23,19 +23,28 @@ Usa [extensions_custom.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensio
 - `LAWYER_TRANSFER_CONTEXT`
 - `LAWYER_TRANSFER_EXTEN`
 - `LAWYER_TRANSFER_PRIORITY`
-- `TRANSFER_MIN_CONFIDENCE`
+- `MIN_CONFIDENCE`
 - nombres reales de prompts
 
 ## Paso 3: definir la ruta hacia abogados
 
 No esta hardcodeada en Python. Debe resolverse en Asterisk o VICIdial con variables, contexto o una extension puente.
 La recomendacion principal del repo es usar el contexto `[vicidial-cobranza-transfer]` como puente seguro.
+El patron historico `Goto(default,INGROUP_ABOGADOS,1)` debe tratarse solo como placeholder
+de laboratorio y no como recomendacion de produccion.
 
 Opciones comunes:
 
 1. Contexto puente que preserve variables y enrute con `Dial(Local/...)`.
 2. `Goto()` a un contexto interno solo dentro del canal Local del puente.
 3. Contexto dedicado que resuelva el ingroup o cola final.
+
+El contexto puente del sample cumple tres funciones:
+
+1. Validar que `LAWYER_TRANSFER_CONTEXT`, `LAWYER_TRANSFER_EXTEN` y `LAWYER_TRANSFER_PRIORITY`
+   hayan sido reemplazados.
+2. Verificar con `DIALPLAN_EXISTS()` que el destino exista antes de anunciar transferencia.
+3. Preservar variables de VICIdial y del resultado `VOSK_*` al saltar a un canal `Local/`.
 
 ## Paso 4: preservar variables de VICIdial
 
@@ -56,11 +65,11 @@ Si tu implementacion VICIdial usa mas variables, preservalas del mismo modo ante
 
 ## Paso 5: umbral de confianza
 
-Usa `TRANSFER_MIN_CONFIDENCE` en el dialplan para evitar transferencias por voz con baja confianza.
+Usa `MIN_CONFIDENCE` en el dialplan para evitar transferencias por voz con baja confianza.
 
 Recomendacion inicial:
 
-- `0.75` para una cartera conservadora
+- `0.70` como punto de partida conservador
 - subirlo si hay mucho ruido o respuestas cortas
 - bajarlo solo si validas mejora real en contacto util
 
@@ -90,3 +99,6 @@ La V1 soporta dos modos:
 2. Dejar que el script haga un `WAIT FOR DIGIT` corto si no detecta voz.
 
 El modo 1 es mas estable en VICIdial porque separa la logica de playback y la de captura.
+En el sample actual se usa `Read(OPCION,,1,,1,1)` antes del EAGI para dejar una ventana
+corta de DTMF. Si buscas un flujo voice-first puro, reduce ese timeout o elimina `Read()`
+y deja que toda la decision la tome `vosk_cobranza.py`.

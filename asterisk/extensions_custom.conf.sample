@@ -1,55 +1,74 @@
 ; Asterisk 18 sample dialplan for local Vosk cobranza IVR.
 ; Ajusta este archivo antes de usarlo en Issabel 5 / VICIdial v12.
 ;
-; Recomendacion principal:
-; - No transfieras directamente con Goto(default,INGROUP_ABOGADOS,1).
-; - Usa el contexto puente `vicidial-cobranza-transfer`.
-; - Define la ruta final con variables heredables:
-;   __LAWYER_TRANSFER_CONTEXT
-;   __LAWYER_TRANSFER_EXTEN
-;   __LAWYER_TRANSFER_PRIORITY
-; - Ajusta `TRANSFER_MIN_CONFIDENCE` segun tus pruebas de STT.
+; Objetivo del sample:
+; - Dar prioridad a DTMF corto si el cliente pulsa una opcion.
+; - Ejecutar EAGI(vosk_cobranza.py) cuando no hay DTMF util.
+; - Transferir solo con SI o NO reconocidos con confianza suficiente.
+; - Repetir una sola vez en DUDA, SILENCIO o valores inesperados.
+; - No exponer el transcript completo en NoOp del dialplan.
+;
+; Recomendaciones:
+; - No hardcodees ingroups reales en este archivo.
+; - Reemplaza los placeholders de transferencia por un contexto o destino real.
+; - En VICIdial la entrega final suele resolverse mejor con Dial(Local/...) o un
+;   contexto puente dedicado, no con un Goto() directo a un ingroup.
+; - Read() consume tiempo de escucha antes de entrar al EAGI. Si buscas un flujo
+;   voice-first puro, reduce mas el timeout o elimina Read() y deja solo EAGI.
 
 [ivr-cobranza-vosk]
-exten => s,1,Answer()
+exten => s,1,NoOp(Inicio IVR cobranza Vosk)
+ same => n,Answer()
  same => n,Set(TRY=0)
- same => n,Set(TRANSFER_MIN_CONFIDENCE=${IF($["${TRANSFER_MIN_CONFIDENCE}"=""]?0.75:${TRANSFER_MIN_CONFIDENCE})})
+ same => n,Set(MAX_RETRIES=1)
+ same => n,Set(MIN_CONFIDENCE=${IF($["${MIN_CONFIDENCE}"=""]?0.70:${MIN_CONFIDENCE})})
+ same => n,Set(__LAWYER_TRANSFER_CONTEXT=${IF($["${LAWYER_TRANSFER_CONTEXT}"=""]?REEMPLAZAR_CONTEXTO_TRANSFER:${LAWYER_TRANSFER_CONTEXT})})
+ same => n,Set(__LAWYER_TRANSFER_EXTEN=${IF($["${LAWYER_TRANSFER_EXTEN}"=""]?REEMPLAZAR_INGROUP_O_EXTENSION:${LAWYER_TRANSFER_EXTEN})})
+ same => n,Set(__LAWYER_TRANSFER_PRIORITY=${IF($["${LAWYER_TRANSFER_PRIORITY}"=""]?1:${LAWYER_TRANSFER_PRIORITY})})
  same => n,Playback(custom/mensaje-cobranza)
- same => n(start),Playback(custom/pregunta-abogado)
- same => n,Read(OPCION,,1,,1,3)
+
+ same => n(start),Set(OPCION=)
+ same => n,Set(VOSK_TEXT=)
+ same => n,Set(VOSK_INTENT=)
+ same => n,Set(VOSK_CONFIDENCE=)
+ same => n,Set(VOSK_SOURCE=)
+ same => n,Playback(custom/pregunta-abogado)
+ same => n,Read(OPCION,,1,,1,1)
  same => n,GotoIf($["${OPCION}"="1"]?transferir-abogado,1)
  same => n,GotoIf($["${OPCION}"="2"]?finalizar,1)
+
  same => n,EAGI(vosk_cobranza.py,${OPCION})
- same => n,NoOp(Vosk intent: ${VOSK_INTENT} source: ${VOSK_SOURCE} confidence: ${VOSK_CONFIDENCE})
- same => n,GotoIf($["${VOSK_INTENT}"="SI"]?validar-transferencia,1)
- same => n,GotoIf($["${VOSK_INTENT}"="NO"]?finalizar,1)
+ same => n,Set(VOSK_INTENT=${IF($["${VOSK_INTENT}"=""]?DUDA:${VOSK_INTENT})})
+ same => n,Set(VOSK_CONFIDENCE=${IF($["${VOSK_CONFIDENCE}"=""]?0.00:${VOSK_CONFIDENCE})})
+ same => n,Set(VOSK_SOURCE=${IF($["${VOSK_SOURCE}"=""]?unknown:${VOSK_SOURCE})})
+ same => n,NoOp(Vosk intent: ${VOSK_INTENT} confidence: ${VOSK_CONFIDENCE} source: ${VOSK_SOURCE})
+
+ same => n,GotoIf($["${VOSK_INTENT}"="SI"]?validar-si,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="NO"]?validar-no,1)
  same => n,GotoIf($["${VOSK_INTENT}"="DUDA"]?manejar-reintento,1)
  same => n,GotoIf($["${VOSK_INTENT}"="SILENCIO"]?manejar-reintento,1)
  same => n,Goto(manejar-reintento,1)
 
-exten => validar-transferencia,1,GotoIf($["${VOSK_SOURCE}"="dtmf"]?transferir-abogado,1)
- same => n,GotoIf($[${VOSK_CONFIDENCE} >= ${TRANSFER_MIN_CONFIDENCE}]?transferir-abogado,1)
- same => n,NoOp(Confianza insuficiente para transferir: ${VOSK_CONFIDENCE})
+exten => validar-si,1,GotoIf($[${VOSK_CONFIDENCE} >= ${MIN_CONFIDENCE}]?transferir-abogado,1)
+ same => n,Goto(manejar-reintento,1)
+
+exten => validar-no,1,GotoIf($[${VOSK_CONFIDENCE} >= ${MIN_CONFIDENCE}]?finalizar,1)
  same => n,Goto(manejar-reintento,1)
 
 exten => manejar-reintento,1,Set(TRY=$[${TRY}+1])
- same => n,GotoIf($[${TRY}<=1]?reintento,1)
+ same => n,GotoIf($[${TRY} <= ${MAX_RETRIES}]?reintento,1)
  same => n,Goto(finalizar,1)
 
 exten => reintento,1,Playback(custom/no-entendi)
  same => n,Goto(s,start)
 
-exten => transferir-abogado,1,Playback(custom/lo-comunico)
- same => n,Goto(vicidial-cobranza-transfer,s,1)
+exten => transferir-abogado,1,Goto(vicidial-cobranza-transfer,s,1)
 
 exten => finalizar,1,Playback(custom/mensaje-final)
  same => n,Hangup()
 
 [vicidial-cobranza-transfer]
 exten => s,1,NoOp(Bridge cobranza -> abogados)
- same => n,Set(__LAWYER_TRANSFER_CONTEXT=${IF($["${LAWYER_TRANSFER_CONTEXT}"=""]?REEMPLAZAR_CONTEXTO_ABOGADOS:${LAWYER_TRANSFER_CONTEXT})})
- same => n,Set(__LAWYER_TRANSFER_EXTEN=${IF($["${LAWYER_TRANSFER_EXTEN}"=""]?REEMPLAZAR_DESTINO_ABOGADOS:${LAWYER_TRANSFER_EXTEN})})
- same => n,Set(__LAWYER_TRANSFER_PRIORITY=${IF($["${LAWYER_TRANSFER_PRIORITY}"=""]?1:${LAWYER_TRANSFER_PRIORITY})})
  same => n,Set(__VICI_ORIG_UNIQUEID=${UNIQUEID})
  same => n,Set(__VICI_ORIG_CALLERID=${CALLERID(all)})
  same => n,Set(__VICI_ORIG_CALLERID_NUM=${CALLERID(num)})
@@ -59,24 +78,35 @@ exten => s,1,NoOp(Bridge cobranza -> abogados)
  same => n,Set(__VICI_LIST_ID=${LIST_ID})
  same => n,Set(__VOSK_INTENT=${VOSK_INTENT})
  same => n,Set(__VOSK_CONFIDENCE=${VOSK_CONFIDENCE})
- same => n,GotoIf($["${LAWYER_TRANSFER_CONTEXT}"="REEMPLAZAR_CONTEXTO_ABOGADOS"]?fallback,1)
- same => n,GotoIf($["${LAWYER_TRANSFER_EXTEN}"="REEMPLAZAR_DESTINO_ABOGADOS"]?fallback,1)
+ same => n,Set(__VOSK_SOURCE=${VOSK_SOURCE})
+ same => n,GotoIf($["${LAWYER_TRANSFER_CONTEXT}"="REEMPLAZAR_CONTEXTO_TRANSFER"]?transfer-config-error,1)
+ same => n,GotoIf($["${LAWYER_TRANSFER_EXTEN}"="REEMPLAZAR_INGROUP_O_EXTENSION"]?transfer-config-error,1)
+ same => n,GotoIf($["${DIALPLAN_EXISTS(${LAWYER_TRANSFER_CONTEXT},${LAWYER_TRANSFER_EXTEN},${LAWYER_TRANSFER_PRIORITY})}"="1"]?dial-target,1)
+ same => n,Goto(transfer-config-error,1)
+
+exten => dial-target,1,Playback(custom/lo-comunico)
  same => n,Dial(Local/route@vicidial-cobranza-transfer/n,45,g)
  same => n,GotoIf($["${DIALSTATUS}"="ANSWER"]?done,1)
- same => n,Goto(fallback,1)
+ same => n,Goto(transfer-config-error,1)
 
-exten => route,1,NoOp(Route to ${LAWYER_TRANSFER_CONTEXT},${LAWYER_TRANSFER_EXTEN},${LAWYER_TRANSFER_PRIORITY})
- same => n,Goto(${LAWYER_TRANSFER_CONTEXT},${LAWYER_TRANSFER_EXTEN},${LAWYER_TRANSFER_PRIORITY})
+exten => route,1,Goto(${LAWYER_TRANSFER_CONTEXT},${LAWYER_TRANSFER_EXTEN},${LAWYER_TRANSFER_PRIORITY})
 
 exten => done,1,Hangup()
 
-exten => fallback,1,NoOp(Transfer failed or route not configured)
+exten => transfer-config-error,1,NoOp(Transferencia no configurada o destino inexistente)
  same => n,Playback(custom/mensaje-final)
  same => n,Hangup()
 
 ; Notas VICIdial:
-; - Define __LAWYER_TRANSFER_CONTEXT, __LAWYER_TRANSFER_EXTEN y __LAWYER_TRANSFER_PRIORITY
-;   antes de entrar al IVR o en el mismo contexto de campana.
-; - Las variables con doble underscore se heredan al canal Local para preservar contexto.
-; - El sample preserva UNIQUEID, CALLERID, CAMPAIGN_ID, LEAD_ID y LIST_ID como ejemplos comunes.
-; - Agrega otras variables de tu entorno VICIdial si tu reporteria o callbacks las necesitan.
+; - Define LAWYER_TRANSFER_CONTEXT, LAWYER_TRANSFER_EXTEN y LAWYER_TRANSFER_PRIORITY
+;   antes de entrar al IVR, o heredalas desde el flujo de campana.
+; - El sample usa placeholders claros:
+;   REEMPLAZAR_CONTEXTO_TRANSFER
+;   REEMPLAZAR_INGROUP_O_EXTENSION
+;   1
+; - DIALPLAN_EXISTS() valida que el destino exista antes de anunciar transferencia.
+; - Las variables con doble underscore se heredan al canal Local para preservar
+;   UNIQUEID, CALLERID y variables VICIdial relevantes.
+; - Si tu operacion usa otro puente Local o un contexto interno distinto,
+;   reemplaza la ruta Dial(Local/route@vicidial-cobranza-transfer/n,45,g)
+;   por la que corresponda a tu entorno.

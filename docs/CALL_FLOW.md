@@ -3,24 +3,29 @@
 ## Flujo nominal
 
 1. El dialplan entra a `ivr-cobranza-vosk`.
-2. Asterisk reproduce `custom/mensaje-cobranza`.
-3. El script EAGI escucha audio durante `listen_seconds`.
-4. El cliente envia PCM al servidor Vosk por WebSocket.
-5. Vosk devuelve texto.
-6. El clasificador devuelve una de cuatro intenciones:
+2. Asterisk responde, limpia variables defensivas y reproduce `custom/mensaje-cobranza`.
+3. Antes de cada intento reproduce `custom/pregunta-abogado`.
+4. El dialplan deja una ventana corta de DTMF con `Read(OPCION,,1,,1,1)`.
+5. Si no hay DTMF util, el script EAGI escucha audio durante `listen_seconds`.
+6. El cliente envia PCM al servidor Vosk por WebSocket.
+7. Vosk devuelve texto.
+8. El clasificador devuelve una de las intenciones base y, si el YAML lo define, tambien `INFO_COBRO`:
    - `SI`
    - `NO`
    - `DUDA`
    - `SILENCIO`
-7. El script fija `VOSK_INTENT`, `VOSK_TEXT`, `VOSK_CONFIDENCE` y `VOSK_SOURCE`.
-8. Si la intencion es `SI` por voz, el dialplan valida `VOSK_CONFIDENCE`.
-9. Si la confianza supera el umbral, deriva al contexto puente `vicidial-cobranza-transfer`.
-10. El contexto puente preserva variables relevantes y hace la entrega final a la ruta legal.
+   - `INFO_COBRO`
+9. El script fija `VOSK_INTENT`, `VOSK_TEXT`, `VOSK_CONFIDENCE` y `VOSK_SOURCE`.
+10. El dialplan normaliza defaults defensivos si alguna variable vuelve vacia.
+11. El dialplan decide como rutear `SI`, `NO` y opcionalmente `INFO_COBRO`, y valida `VOSK_CONFIDENCE` segun la politica del flujo.
+12. Si la confianza supera el umbral, deriva al contexto puente `vicidial-cobranza-transfer`.
+13. El contexto puente valida placeholders y destino con `DIALPLAN_EXISTS()` antes de anunciar transferencia.
 
 ## Reintento
 
 - Si la intencion es `DUDA` o `SILENCIO`, el dialplan repite una sola vez.
 - Si vuelve a fallar, reproduce mensaje final y cuelga.
+- No hay loop infinito: `TRY` arranca en `0`, `MAX_RETRIES` queda en `1` y luego finaliza.
 
 ## Modo DTMF
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vicidial_vosk_cobranza_ivr.logging_utils import mask_sensitive_data
+from vicidial_vosk_cobranza_ivr.logging_utils import mask_phone_numbers, mask_sensitive_data
 
 
 def test_masks_phone_numbers_and_long_ids() -> None:
@@ -41,3 +41,10 @@ def test_masks_combined_sensitive_values() -> None:
     assert "USD 4500" not in masked
     assert "[EMAIL]" in masked
     assert "[MONTO]" in masked
+
+
+def test_mask_phone_numbers_hides_caller_value() -> None:
+    masked = mask_phone_numbers("caller=3001234567")
+
+    assert "3001234567" not in masked
+    assert masked == "caller=XXXXXXXX67"

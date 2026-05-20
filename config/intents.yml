@@ -1,29 +1,97 @@
-SI:
+"SI":
   - "si"
+  - "sí"
+  - "claro"
+  - "dale"
+  - "ta bien"
+  - "está bien"
   - "correcto"
   - "de acuerdo"
   - "acepto"
+  - "transfierame"
+  - "transfiérame"
+  - "pasame"
+  - "pásame"
   - "comuniqueme"
+  - "comuníqueme"
   - "quiero hablar"
-  - "paseme"
-  - "abogado"
-  - "asesor"
+  - "quiero hablar con alguien"
+  - "quiero hablar con un representante"
 
-NO:
+"NO":
   - "no"
-  - "ahora no"
   - "no quiero"
-  - "despues"
-  - "luego"
   - "no me interesa"
-  - "equivocado"
+  - "no me transfiera"
+  - "ahora no"
+  - "despues"
+  - "después"
+  - "mas tarde"
+  - "más tarde"
+  - "no puedo ahora"
 
-DUDA:
+"INFO_COBRO":
+  - "quiero saber que me estan cobrando"
+  - "quiero saber qué me están cobrando"
+  - "que me estan cobrando"
+  - "qué me están cobrando"
+  - "que es lo que me estan cobrando"
+  - "qué es lo que me están cobrando"
+  - "quiero saber cuanto debo"
+  - "quiero saber cuánto debo"
+  - "cuanto debo"
+  - "cuánto debo"
+  - "cual es el monto"
+  - "cuál es el monto"
+  - "de que es esa deuda"
+  - "de qué es esa deuda"
+  - "de que se trata"
+  - "de qué se trata"
+  - "explicame ese cobro"
+  - "explícame ese cobro"
+
+"NUMERO_EQUIVOCADO":
+  - "numero equivocado"
+  - "número equivocado"
+  - "equivocado"
+  - "aqui no vive"
+  - "aquí no vive"
+  - "este no es su numero"
+  - "este no es su número"
+
+"NO_ES_PERSONA":
+  - "no soy esa persona"
+  - "no conozco esa persona"
+  - "no la conozco"
+  - "no lo conozco"
+  - "no conozco esa deuda"
+
+"PROMESA_PAGO":
+  - "quiero pagar"
+  - "quiero resolver"
+  - "quiero ponerme al dia"
+  - "quiero ponerme al día"
+  - "quiero hacer un acuerdo"
+  - "quiero llegar a un acuerdo"
+  - "puedo pagar hoy"
+  - "voy a pagar"
+  - "cuando puedo pagar"
+
+"CALLBACK":
+  - "llameme despues"
+  - "llámeme después"
+  - "llamenme luego"
+  - "llámenme luego"
+  - "ahora estoy ocupado"
+  - "estoy trabajando"
+
+"DUDA":
   - "no entiendo"
   - "quien habla"
-  - "que es"
+  - "quién habla"
   - "repita"
   - "explique"
-  - "no se"
+  - "que es esto"
+  - "qué es esto"
 
-SILENCIO: []
+"SILENCIO": []
