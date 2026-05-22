@@ -20,6 +20,45 @@ ivr:
 audio:
   min_rms: 150.0
 
+lead_context:
+  csv_path: "lead_context.sample.csv"
+
+prompts:
+  personalized_greeting_enabled: false
+  greeting_template: "Hola {client_name}, nos comunicamos de SokaCorp por una gestión pendiente relacionada con {bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
+  greeting_template_without_name: "Hola, nos comunicamos de SokaCorp por una gestión pendiente relacionada con {bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
+  greeting_fallback: "Hola, nos comunicamos de SokaCorp por una gestión pendiente. ¿Desea que le comuniquemos ahora? Le escucho."
+  generated_audio_dir: "/var/lib/asterisk/sounds/custom/generated"
+  generated_audio_playback_prefix: "custom/generated"
+  default_greeting_audio: "custom/mensaje-cobranza"
+  greeting_followup_audio: "custom/pregunta-abogado"
+  bank_greeting_filename_template: "custom/gestion-{bank_slug}"
+  bank_greeting_fallback_audio: ""
+  sound_search_dirs:
+    - "/var/lib/asterisk/sounds"
+    - "/usr/share/asterisk/sounds"
+  tts_provider: "espeak-ng"
+  tts_voice: "es-la"
+  cache_enabled: true
+
+name_audio:
+  enabled: false
+  provider: "elevenlabs"
+  cache_enabled: true
+  cache_dir: "/var/lib/asterisk/sounds/custom/generated/names"
+  mirror_dirs:
+    - "/usr/share/asterisk/sounds/custom/generated/names"
+  playback_prefix: "custom/generated/names"
+  version: "v1"
+  max_name_chars: 80
+  fallback_on_error: true
+  elevenlabs:
+    api_key_env: "ELEVENLABS_API_KEY"
+    voice_id: "IoWn77TsmQnza94sYlfg"
+    model_id: "eleven_multilingual_v2"
+    output_format: "wav"
+    timeout_seconds: 15
+
 asterisk:
   app_name: "vicidial-vosk-cobranza-ivr"
   channel_variable_name: "VOSK_INTENT"

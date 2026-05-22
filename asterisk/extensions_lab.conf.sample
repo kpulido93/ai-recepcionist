@@ -1,6 +1,6 @@
 ; Asterisk dialplan sample para laboratorio local.
 ; Objetivo:
-; - Flujo principal voice-first con EAGI.
+; - Flujo principal voice-first con contexto de lead y saludo segmentado opcional.
 ; - Transferencia local a la extension 1002 cuando la intencion es afirmativa.
 ; - INFO_COBRO indica interes en conocer el detalle del cobro o la deuda.
 ; - En laboratorio, INFO_COBRO y PROMESA_PAGO se transfieren igual que SI.
@@ -22,23 +22,33 @@ exten => s,1,NoOp(Inicio IVR cobranza Vosk laboratorio)
  same => n,Answer()
  same => n,Set(TRY=0)
  same => n,Set(MAX_RETRIES=1)
- same => n,Playback(custom/mensaje-cobranza)
+ same => n,Set(IVR_PHONE_NUMBER=${CALLERID(num)})
 
  same => n(start),Set(VOSK_TEXT=)
  same => n,Set(VOSK_INTENT=)
  same => n,Set(VOSK_CONFIDENCE=)
  same => n,Set(VOSK_SOURCE=)
- ; Prompt recomendado voice-first:
- ; "¿Lo transfiero ahora? Le escucho."
- ; Si tu canal o softphone no permite barge-in real sobre Playback(),
- ; el caller debe responder al terminar el prompt.
- same => n,Playback(custom/pregunta-abogado)
+ same => n,Set(IVR_NAME_AUDIO=)
+ same => n,Set(IVR_BANK_GREETING_AUDIO=)
+ same => n,Set(IVR_GREETING_AUDIO=)
+ same => n,Set(IVR_GREETING_FOLLOWUP_AUDIO=)
+ same => n,AGI(load_lead_context.py)
+ same => n,AGI(generate_name_audio.py)
+ same => n,AGI(generate_personalized_prompt.py)
+ same => n,GotoIf($["${IVR_NAME_AUDIO}"!="" & "${IVR_BANK_GREETING_AUDIO}"!=""]?play-segmented,1)
+ same => n,Goto(play-fallback,1)
 
- ; Fallback DTMF opcional. No es el camino principal del laboratorio.
- ; same => n,Read(OPCION,,1,,1,1)
- ; same => n,GotoIf($["${OPCION}"="1"]?transferir-abogado,1)
- ; same => n,GotoIf($["${OPCION}"="2"]?finalizar,1)
+exten => play-segmented,1,Playback(custom/hola)
+ same => n,Playback(${IVR_NAME_AUDIO})
+ same => n,Playback(${IVR_BANK_GREETING_AUDIO})
+ same => n,Goto(capturar-respuesta,1)
 
+exten => play-fallback,1,Set(IVR_GREETING_AUDIO=${IF($["${IVR_GREETING_AUDIO}"=""]?custom/mensaje-cobranza:${IVR_GREETING_AUDIO})})
+ same => n,Playback(${IVR_GREETING_AUDIO})
+ same => n,ExecIf($["${IVR_GREETING_FOLLOWUP_AUDIO}"!=""]?Playback(${IVR_GREETING_FOLLOWUP_AUDIO}))
+ same => n,Goto(capturar-respuesta,1)
+
+exten => capturar-respuesta,1,NoOp(Captura de respuesta IVR voice-first)
  same => n,EAGI(vosk_cobranza.py)
  same => n,Set(VOSK_INTENT=${IF($["${VOSK_INTENT}"=""]?DUDA:${VOSK_INTENT})})
  same => n,Set(VOSK_CONFIDENCE=${IF($["${VOSK_CONFIDENCE}"=""]?0.00:${VOSK_CONFIDENCE})})

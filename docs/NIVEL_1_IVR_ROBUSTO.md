@@ -27,6 +27,68 @@ Flujo resumido:
 4. El clasificador asigna un intent usando reglas locales y configuración YAML.
 5. El dialplan decide si transferir, reintentar, finalizar o dejar una disposición documentada.
 
+## Saludo Segmentado Opcional
+
+El flujo base del Nivel 1 sigue funcionando sin dependencias externas, pero puede
+usar un modo opcional de saludo segmentado para decir solo el nombre del cliente:
+
+```text
+custom/hola -> audio-cache-del-nombre -> custom/gestion-banco -> EAGI/Vosk
+```
+
+Puntos clave:
+
+- La mayor parte del prompt debe seguir siendo audio fijo o voz humana.
+- El nombre es el único segmento pensado para TTS externo opcional.
+- Si el cache del nombre no existe y la API falla o no está configurada, el flujo cae
+  al saludo habitual sin romper la llamada.
+- `name_audio.enabled` permanece en `false` por defecto.
+
+## Cache De Nombres
+
+Cuando `name_audio.enabled=true`, el sistema puede generar el nombre una sola vez y
+reutilizarlo en llamadas futuras.
+
+Configuración relevante en `config/ivr.yml`:
+
+- `name_audio.cache_dir`: directorio principal del cache.
+- `name_audio.mirror_dirs`: directorios espejo opcionales para compatibilidad con Asterisk.
+- `name_audio.playback_prefix`: prefijo reproducible por `Playback()`.
+- `name_audio.version`: invalida el cache de forma controlada al cambiar voz o estrategia.
+- `name_audio.max_name_chars`: limita el nombre antes de llamar al proveedor.
+- `name_audio.fallback_on_error`: si está en `true`, cualquier fallo devuelve `None` y el IVR sigue con fallback local.
+
+## ElevenLabs Opcional
+
+El proveedor externo de nombre está pensado como complemento opcional, no como dependencia
+del IVR.
+
+- La API key se lee solo desde la variable de entorno `ELEVENLABS_API_KEY`.
+- La API key no debe guardarse en YAML, `.env` versionado ni logs.
+- Si falta `ELEVENLABS_API_KEY`, no se genera audio de nombre y el flujo continúa.
+- La salida final se convierte siempre a WAV `8 kHz`, `mono`, `PCM 16-bit`.
+
+## Riesgo Operativo
+
+Decir el nombre de una persona antes de validar identidad puede no ser apropiado en todos los
+casos de uso de cobranza.
+
+Recomendación:
+
+- No actives el saludo con nombre si tu flujo todavía no valida identidad mínima.
+- Usa el modo segmentado solo en escenarios de laboratorio o donde el área legal/operativa ya lo haya aprobado.
+
+## Limpieza Del Cache
+
+El cache de nombres debe revisarse periódicamente para evitar crecimiento innecesario y para
+rotar versiones antiguas.
+
+Ejemplos prácticos:
+
+- borrar audios viejos por fecha
+- invalidar audios al cambiar `voice_id`, `model_id` o `name_audio.version`
+- limpiar manualmente `custom/generated/names/` durante pruebas controladas
+
 ## Intents
 
 El Nivel 1 robusto trabaja con estos intents:
