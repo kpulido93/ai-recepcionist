@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
 
@@ -30,7 +30,11 @@ from vicidial_vosk_cobranza_ivr.logging_utils import (
 from vicidial_vosk_cobranza_ivr.logging_utils import (
     mask_phone_numbers as mask_sensitive_phone_numbers,
 )
-from vicidial_vosk_cobranza_ivr.service import CobranzaIvrService
+from vicidial_vosk_cobranza_ivr.reporting import (
+    append_final_call_event,
+    build_final_call_event,
+)
+from vicidial_vosk_cobranza_ivr.service import CobranzaIvrService, ProcessingOutcome
 from vicidial_vosk_cobranza_ivr.vosk_client import VoskClient
 
 SAFE_AGI_VALUE_LENGTH = 2048
@@ -80,7 +84,11 @@ def run_eagi() -> int:
 
     try:
         runtime_paths = resolve_runtime_paths()
-        config = load_app_config(runtime_paths.config_path, runtime_paths.intents_path)
+        config = load_app_config(
+            runtime_paths.config_path,
+            runtime_paths.intents_path,
+            runtime_paths.logging_path,
+        )
         logger = configure_logging(config.logging, runtime_paths.logging_path)
         _redirect_console_logging_to_stderr(logger)
         service = build_service(config=config, logger=logger)
@@ -116,6 +124,7 @@ def run_eagi_session(
     channel = call_environment.get("agi_channel", "")
     uniqueid = call_environment.get("agi_uniqueid", "")
     dtmf = (call_environment.get("agi_arg_1", "") or "").strip() or None
+    attempts = _resolve_attempts(call_environment)
     masked_channel = _mask_log_value(channel, config.logging.mask_phone_numbers)
     masked_caller = _mask_log_value(caller, config.logging.mask_phone_numbers)
     logger.info(
@@ -126,6 +135,9 @@ def run_eagi_session(
     )
 
     try:
+        outcome: ProcessingOutcome | None = None
+        transcript = ""
+        finish_reason = "error"
         capture_result: CaptureResult | None = None
         if dtmf and dtmf in config.ivr.dtmf_map:
             outcome = service.classify_audio_bytes(b"", config.ivr.sample_rate, dtmf=dtmf)
@@ -186,12 +198,56 @@ def run_eagi_session(
             caller=caller,
             finish_reason=finish_reason,
         )
+        _write_final_event(
+            logger=logger,
+            config=config,
+            uniqueid=uniqueid,
+            channel=channel,
+            caller=caller,
+            intent=intent_value(outcome.intent),
+            confidence=outcome.confidence,
+            matched_phrase=outcome.matched_value,
+            transcript=transcript,
+            finish_reason=finish_reason,
+            attempts=attempts,
+            source=outcome.source,
+        )
         if not write_ok:
             logger.warning("Asterisk no confirmo SET VARIABLE para todas las variables VOSK.")
             return 1
         return 1 if outcome.source == "error" else 0
     except AgiIoError as exc:
         logger.warning("Canal AGI no disponible para devolver resultado: %s", exc)
+        if outcome is not None:
+            _write_final_event(
+                logger=logger,
+                config=config,
+                uniqueid=uniqueid,
+                channel=channel,
+                caller=caller,
+                intent=intent_value(outcome.intent),
+                confidence=outcome.confidence,
+                matched_phrase=outcome.matched_value,
+                transcript=transcript,
+                finish_reason=finish_reason,
+                attempts=attempts,
+                source=outcome.source,
+            )
+        else:
+            _write_final_event(
+                logger=logger,
+                config=config,
+                uniqueid=uniqueid,
+                channel=channel,
+                caller=caller,
+                intent=config.ivr.default_intent,
+                confidence=0.0,
+                matched_phrase=None,
+                transcript="",
+                finish_reason="error",
+                attempts=attempts,
+                source="error",
+            )
         return 1
     except Exception:
         logger.exception("Error durante la ejecucion EAGI")
@@ -199,6 +255,20 @@ def run_eagi_session(
             session,
             config.asterisk.channel_variable_name,
             config.ivr.default_intent,
+        )
+        _write_final_event(
+            logger=logger,
+            config=config,
+            uniqueid=uniqueid,
+            channel=channel,
+            caller=caller,
+            intent=config.ivr.default_intent,
+            confidence=0.0,
+            matched_phrase=None,
+            transcript="",
+            finish_reason="error",
+            attempts=attempts,
+            source="error",
         )
         return 1
 
@@ -429,6 +499,49 @@ def _resolve_finish_reason(capture_finish_reason: str, outcome_finish_reason: st
     if capture_finish_reason in {"silence_after_speech", "timeout", "no_audio"}:
         return capture_finish_reason
     return outcome_finish_reason
+
+
+def _write_final_event(
+    *,
+    logger: logging.Logger,
+    config: AppConfig,
+    uniqueid: str,
+    channel: str,
+    caller: str,
+    intent: str,
+    confidence: float,
+    matched_phrase: str | None,
+    transcript: str,
+    finish_reason: str,
+    attempts: int | None,
+    source: str,
+) -> None:
+    event = build_final_call_event(
+        uniqueid=uniqueid,
+        channel=channel,
+        caller=caller,
+        intent=intent,
+        confidence=confidence,
+        matched_phrase=matched_phrase,
+        text=transcript,
+        stop_reason=finish_reason,
+        attempts=attempts,
+        source=source,
+        mask_phone_numbers=config.logging.mask_phone_numbers,
+    )
+    append_final_call_event(config.logging.events_path, event, logger)
+
+
+def _resolve_attempts(environment: Mapping[str, str]) -> int | None:
+    for key in ("agi_arg_2", "agi_attempts", "agi_try", "TRY"):
+        raw_value = environment.get(key, "").strip()
+        if not raw_value:
+            continue
+        try:
+            return int(raw_value)
+        except ValueError:
+            continue
+    return None
 
 
 def _maybe_dump_audio_bytes(

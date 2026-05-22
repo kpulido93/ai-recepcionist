@@ -15,7 +15,7 @@ Softphone 1001 -> Asterisk -> EAGI -> Vosk Docker -> intent -> 1002
 Descripcion operativa:
 
 1. El usuario registrado como `1001` llama a la extension `9900`.
-2. Asterisk reproduce los audios del IVR y ejecuta `EAGI(vosk_cobranza.py)`.
+2. Asterisk puede ejecutar `AGI(generate_personalized_prompt.py)` para construir un saludo local por lead y luego ejecuta `EAGI(vosk_cobranza.py)`.
 3. El AGI envia audio a Vosk Server por WebSocket.
 4. El texto reconocido se clasifica como `SI`, `NO`, `DUDA`, `SILENCIO` o intents de cobranza como `INFO_COBRO`, `PROMESA_PAGO`, `CALLBACK`, `NUMERO_EQUIVOCADO` y `NO_ES_PERSONA`.
 5. Segun la intencion, Asterisk transfiere hacia `1002`, reintenta una vez o finaliza/documenta el resultado en el laboratorio.
@@ -204,6 +204,8 @@ Si tu distro usa `/usr/share/asterisk/agi-bin`, cambia solo la ruta de destino d
 
 Tambien puedes apoyarte en [scripts/install_agi.sh](/D:/repos/ai-recepcionista/scripts/install_agi.sh) como base de despliegue local, pero el wrapper anterior deja explicito que Asterisk debe usar la `.venv` del laboratorio.
 
+Si usas el sample del laboratorio con saludo personalizado, crea tambien un wrapper gemelo para `generate_personalized_prompt.py` en el mismo `agi-bin`, apuntando a `${PROJECT_DIR}/agi/generate_personalized_prompt.py`.
+
 ## 9. Asterisk
 
 Objetivo minimo del laboratorio:
@@ -216,7 +218,7 @@ Objetivo minimo del laboratorio:
 Samples incluidos en el repo:
 
 - [asterisk/pjsip_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/pjsip_lab.conf.sample): endpoints PJSIP locales `1001` y `1002`, transporte UDP en `0.0.0.0:5060` y placeholders seguros.
-- [asterisk/extensions_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_lab.conf.sample): dialplan voice-first del laboratorio con `9900 -> ivr-cobranza-vosk -> PJSIP/1002`, un solo reintento para `DUDA`/`SILENCIO` y rutas documentadas para `CALLBACK`, `NUMERO_EQUIVOCADO` y `NO_ES_PERSONA`.
+- [asterisk/extensions_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_lab.conf.sample): dialplan voice-first del laboratorio con `9900 -> ivr-cobranza-vosk -> PJSIP/1002`, saludo personalizado opcional por AGI con fallback a `custom/mensaje-cobranza`, un solo reintento para `DUDA`/`SILENCIO` y rutas documentadas para `CALLBACK`, `NUMERO_EQUIVOCADO` y `NO_ES_PERSONA`.
 - [asterisk/extensions_custom.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_custom.conf.sample): sample mas cercano al flujo futuro de integracion con VICIdial.
 
 Para el laboratorio local, carga primero `pjsip_lab.conf.sample` y `extensions_lab.conf.sample`. El sample `extensions_custom.conf.sample` queda como referencia para escenarios mas cercanos a produccion o a una integracion posterior con VICIdial.
@@ -226,8 +228,34 @@ Nota sobre intents:
 - `INFO_COBRO` indica interes en conocer el detalle del cobro o de la deuda.
 - `PROMESA_PAGO` indica disposicion a pagar o resolver y en laboratorio tambien se transfiere a `1002`.
 - En el laboratorio, `extensions_lab.conf.sample` transfiere `SI`, `INFO_COBRO` y `PROMESA_PAGO` igual que `SI` hacia `1002`.
+- Si `IVR_LEAD_ID` viene vacio, el sample deriva `lab-${UNIQUEID}` para el cache local del saludo.
+- El sample llama `AGI(generate_personalized_prompt.py)` y luego hace `Playback(${IVR_GREETING_AUDIO})`.
+- Si `IVR_GREETING_AUDIO` queda vacio, el sample cae a `Playback(custom/mensaje-cobranza)`.
+- El sample registra el resultado del `Dial()` con `Set(TRANSFER_STATUS=${DIALSTATUS})` y lo expone con `NoOp(TRANSFER_STATUS=${TRANSFER_STATUS})`.
 - `CALLBACK`, `NUMERO_EQUIVOCADO` y `NO_ES_PERSONA` no transfieren por defecto en el sample; quedan en extensiones documentadas para que luego puedas mapear dispositions reales sin tocar el contrato de `VOSK_INTENT`.
 - En produccion puedes rutear `INFO_COBRO` a otro agente, skill o flujo sin cambiar el contrato base de `VOSK_INTENT`.
+
+Ejemplo rapido para probar el saludo personalizado en laboratorio:
+
+```asterisk
+same => n,Set(IVR_CLIENT_NAME=Kevin)
+same => n,Set(IVR_BANK_NAME=Banco Popular)
+same => n,AGI(generate_personalized_prompt.py)
+same => n,Set(IVR_GREETING_AUDIO=${IF($["${IVR_GREETING_AUDIO}"=""]?custom/mensaje-cobranza:${IVR_GREETING_AUDIO})})
+same => n,Playback(${IVR_GREETING_AUDIO})
+```
+
+Con ese ejemplo, si la generacion local funciona, el caller oye un saludo parecido a `Hola Kevin, nos comunicamos de SokaCorp por una gestion pendiente relacionada con Banco Popular. ¿Desea que le comuniquemos ahora? Le escucho.` Si falla, el laboratorio sigue con el audio generico `custom/mensaje-cobranza`.
+
+Cuando usas ese saludo completo generado, el sample ya no necesita reproducir `custom/pregunta-abogado` aparte. Conserva ese audio solo si quieres volver a un flujo estatico de dos prompts.
+
+Lectura recomendada de `TRANSFER_STATUS` en laboratorio:
+
+- `ANSWER`: el agente o abogado contesto la transferencia.
+- `NOANSWER`: el agente no contesto dentro del timeout.
+- `BUSY`: el destino estaba ocupado.
+- `CANCEL`: el llamante colgo antes de completar la transferencia.
+- `CHANUNAVAIL`: el agente o canal no estaba disponible.
 
 Prompt recomendado para `custom/pregunta-abogado`:
 

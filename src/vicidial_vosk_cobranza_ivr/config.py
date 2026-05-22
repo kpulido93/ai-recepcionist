@@ -21,6 +21,27 @@ DEFAULT_RMS_SPEECH_THRESHOLD = 250.0
 DEFAULT_MASK_PHONE_NUMBERS = True
 DEFAULT_DEBUG_AUDIO_DUMP_ENABLED = False
 DEFAULT_DEBUG_AUDIO_DUMP_DIR = "/tmp"
+DEFAULT_EVENTS_PATH = "/var/log/asterisk/vosk_cobranza_events.jsonl"
+DEFAULT_PERSONALIZED_GREETING_ENABLED = False
+DEFAULT_GREETING_TEMPLATE = (
+    "Hola {client_name}, nos comunicamos de SokaCorp por una gestion pendiente "
+    "relacionada con {bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
+)
+DEFAULT_GREETING_TEMPLATE_WITHOUT_NAME = (
+    "Hola, nos comunicamos de SokaCorp por una gestion pendiente relacionada con "
+    "{bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
+)
+DEFAULT_GREETING_FALLBACK = (
+    "Hola, nos comunicamos de SokaCorp por una gestion pendiente. "
+    "¿Desea que le comuniquemos ahora? Le escucho."
+)
+DEFAULT_GENERATED_AUDIO_DIR = "/var/lib/asterisk/sounds/custom/generated"
+DEFAULT_GENERATED_AUDIO_PLAYBACK_PREFIX = "custom/generated"
+DEFAULT_TTS_PROVIDER = "espeak-ng"
+DEFAULT_TTS_VOICE = "es-la"
+DEFAULT_PROMPTS_CACHE_ENABLED = True
+DEFAULT_PROMPTS_PRIVACY_MODE = False
+DEFAULT_PROMPTS_DEBUG_LOG_VALUES = False
 
 
 class ConfigError(RuntimeError):
@@ -83,6 +104,7 @@ class LoggingSettings:
     enabled: bool
     log_level: str
     log_path: str
+    events_path: str
     log_transcript: bool
     mask_phone_numbers: bool
     debug_audio_dump_enabled: bool
@@ -92,12 +114,28 @@ class LoggingSettings:
 
 
 @dataclass(frozen=True)
+class PromptsSettings:
+    personalized_greeting_enabled: bool
+    greeting_template: str
+    greeting_template_without_name: str
+    greeting_fallback: str
+    generated_audio_dir: str
+    generated_audio_playback_prefix: str
+    tts_provider: str
+    tts_voice: str
+    cache_enabled: bool
+    privacy_mode: bool
+    debug_log_values: bool
+
+
+@dataclass(frozen=True)
 class AppConfig:
     audio: AudioSettings
     ivr: IvrSettings
     asterisk: AsteriskSettings
     vosk: VoskSettings
     logging: LoggingSettings
+    prompts: PromptsSettings
     intents: dict[str, list[str]]
 
 
@@ -128,14 +166,22 @@ def resolve_runtime_paths(
     )
 
 
-def load_app_config(config_path: Path, intents_path: Path) -> AppConfig:
+def load_app_config(
+    config_path: Path,
+    intents_path: Path,
+    logging_config_path: Path | None = None,
+) -> AppConfig:
     raw_config = _load_yaml_file(config_path)
     raw_intents = _load_yaml_file(intents_path)
+    raw_logging_runtime_config = (
+        _load_yaml_file(logging_config_path) if logging_config_path is not None else {}
+    )
     _apply_env_overrides(raw_config)
     ivr_config = _get_section(raw_config, "ivr")
     asterisk_config = _get_section(raw_config, "asterisk")
     vosk_config = _get_section(raw_config, "vosk")
     logging_config = _get_section(raw_config, "logging")
+    prompts_config = _get_section(raw_config, "prompts")
     sample_rate = _resolve_sample_rate(ivr_config, vosk_config)
 
     try:
@@ -198,6 +244,10 @@ def load_app_config(config_path: Path, intents_path: Path) -> AppConfig:
                 enabled=bool(logging_config["enabled"]),
                 log_level=str(logging_config["log_level"]).upper(),
                 log_path=str(logging_config["log_path"]),
+                events_path=_resolve_events_path(
+                    logging_config=logging_config,
+                    raw_logging_runtime_config=raw_logging_runtime_config,
+                ),
                 log_transcript=bool(logging_config.get("log_transcript", False)),
                 mask_phone_numbers=bool(
                     logging_config.get("mask_phone_numbers", DEFAULT_MASK_PHONE_NUMBERS)
@@ -212,6 +262,47 @@ def load_app_config(config_path: Path, intents_path: Path) -> AppConfig:
                 ),
                 rotate_max_bytes=int(logging_config.get("rotate_max_bytes", 10485760)),
                 rotate_backup_count=int(logging_config.get("rotate_backup_count", 10)),
+            ),
+            prompts=PromptsSettings(
+                personalized_greeting_enabled=bool(
+                    prompts_config.get(
+                        "personalized_greeting_enabled",
+                        DEFAULT_PERSONALIZED_GREETING_ENABLED,
+                    )
+                ),
+                greeting_template=str(
+                    prompts_config.get("greeting_template", DEFAULT_GREETING_TEMPLATE)
+                ),
+                greeting_template_without_name=str(
+                    prompts_config.get(
+                        "greeting_template_without_name",
+                        DEFAULT_GREETING_TEMPLATE_WITHOUT_NAME,
+                    )
+                ),
+                greeting_fallback=str(
+                    prompts_config.get("greeting_fallback", DEFAULT_GREETING_FALLBACK)
+                ),
+                generated_audio_dir=str(
+                    prompts_config.get("generated_audio_dir", DEFAULT_GENERATED_AUDIO_DIR)
+                ),
+                generated_audio_playback_prefix=str(
+                    prompts_config.get(
+                        "generated_audio_playback_prefix",
+                        DEFAULT_GENERATED_AUDIO_PLAYBACK_PREFIX,
+                    )
+                ),
+                tts_provider=str(prompts_config.get("tts_provider", DEFAULT_TTS_PROVIDER)),
+                tts_voice=str(prompts_config.get("tts_voice", DEFAULT_TTS_VOICE)),
+                cache_enabled=bool(
+                    prompts_config.get("cache_enabled", DEFAULT_PROMPTS_CACHE_ENABLED)
+                ),
+                privacy_mode=bool(prompts_config.get("privacy_mode", DEFAULT_PROMPTS_PRIVACY_MODE)),
+                debug_log_values=bool(
+                    prompts_config.get(
+                        "debug_log_values",
+                        DEFAULT_PROMPTS_DEBUG_LOG_VALUES,
+                    )
+                ),
             ),
             intents={
                 str(intent_name).upper(): [str(phrase) for phrase in phrase_list]
@@ -264,6 +355,7 @@ def _apply_env_overrides(config_data: dict[str, Any]) -> None:
     _set_if_env(config_data, ("audio", "min_rms"), "VOSK_MIN_RMS", transform=float)
     _set_if_env(config_data, ("logging", "log_level"), "LOG_LEVEL", transform=str.upper)
     _set_if_env(config_data, ("logging", "log_path"), "LOG_PATH")
+    _set_if_env(config_data, ("logging", "events_path"), "LOG_EVENTS_PATH")
     _set_if_env(config_data, ("logging", "log_transcript"), "LOG_TRANSCRIPT", transform=_parse_bool)
     _set_if_env(
         config_data,
@@ -355,6 +447,24 @@ def _set_config_value(
         section = {}
         config_data[path_segments[0]] = section
     section[path_segments[1]] = value
+
+
+def _resolve_events_path(
+    *,
+    logging_config: dict[str, Any],
+    raw_logging_runtime_config: dict[str, Any],
+) -> str:
+    if "events_path" in logging_config:
+        return str(logging_config["events_path"])
+
+    if "events_path" in raw_logging_runtime_config:
+        return str(raw_logging_runtime_config["events_path"])
+
+    reporting_config = raw_logging_runtime_config.get("reporting")
+    if isinstance(reporting_config, dict) and "events_path" in reporting_config:
+        return str(reporting_config["events_path"])
+
+    return DEFAULT_EVENTS_PATH
 
 
 def _parse_bool(value: str) -> bool:

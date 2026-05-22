@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from vicidial_vosk_cobranza_ivr.config import (
     AudioSettings,
     IvrSettings,
     LoggingSettings,
+    PromptsSettings,
     VoskSettings,
 )
 from vicidial_vosk_cobranza_ivr.intent_classifier import IntentClassifier
@@ -106,12 +108,35 @@ def build_config() -> AppConfig:
             enabled=False,
             log_level="INFO",
             log_path="./logs/test.log",
+            events_path="",
             log_transcript=False,
             mask_phone_numbers=True,
             debug_audio_dump_enabled=False,
             debug_audio_dump_dir="/tmp",
             rotate_max_bytes=10485760,
             rotate_backup_count=10,
+        ),
+        prompts=PromptsSettings(
+            personalized_greeting_enabled=True,
+            greeting_template=(
+                "Hola {client_name}, nos comunicamos de SokaCorp por una gestion pendiente "
+                "relacionada con {bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
+            ),
+            greeting_template_without_name=(
+                "Hola, nos comunicamos de SokaCorp por una gestion pendiente relacionada con "
+                "{bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
+            ),
+            greeting_fallback=(
+                "Hola, nos comunicamos de SokaCorp por una gestion pendiente. "
+                "¿Desea que le comuniquemos ahora? Le escucho."
+            ),
+            generated_audio_dir="/tmp/generated",
+            generated_audio_playback_prefix="custom/generated",
+            tts_provider="espeak-ng",
+            tts_voice="es-la",
+            cache_enabled=True,
+            privacy_mode=False,
+            debug_log_values=False,
         ),
         intents={
             "SI": ["si", "quiero hablar", "comuniqueme"],
@@ -198,7 +223,16 @@ def test_run_eagi_session_falls_back_to_voice_when_dtmf_is_invalid() -> None:
         service=service,
         config=config,
         logger=logger,
-        capture_audio=lambda fd, listen_seconds, sample_rate: b"\xff\x7f" * 400,
+        capture_audio=lambda fd, listen_seconds, sample_rate: CaptureResult(
+            audio_bytes=b"\xff\x7f" * 400,
+            bytes_read=800,
+            duration_ms=50,
+            speech_started=True,
+            finish_reason="silence_after_speech",
+            silence_ms=700,
+            average_rms=12000.0,
+            max_rms=32767.0,
+        ),
         environment=session.environment,
     )
 
@@ -270,7 +304,16 @@ def test_run_eagi_session_marks_error_when_vosk_times_out() -> None:
         service=service,
         config=config,
         logger=logger,
-        capture_audio=lambda fd, listen_seconds, sample_rate: b"\xff\x7f" * 400,
+        capture_audio=lambda fd, listen_seconds, sample_rate: CaptureResult(
+            audio_bytes=b"\xff\x7f" * 400,
+            bytes_read=800,
+            duration_ms=50,
+            speech_started=True,
+            finish_reason="silence_after_speech",
+            silence_ms=700,
+            average_rms=12000.0,
+            max_rms=32767.0,
+        ),
         environment=session.environment,
     )
 
@@ -455,6 +498,7 @@ def test_log_result_masks_transcript_and_logs_fin_eagi_when_enabled() -> None:
             enabled=base_config.logging.enabled,
             log_level=base_config.logging.log_level,
             log_path=base_config.logging.log_path,
+            events_path=base_config.logging.events_path,
             log_transcript=True,
             mask_phone_numbers=True,
             debug_audio_dump_enabled=base_config.logging.debug_audio_dump_enabled,
@@ -462,6 +506,7 @@ def test_log_result_masks_transcript_and_logs_fin_eagi_when_enabled() -> None:
             rotate_max_bytes=base_config.logging.rotate_max_bytes,
             rotate_backup_count=base_config.logging.rotate_backup_count,
         ),
+        prompts=base_config.prompts,
         intents=base_config.intents,
     )
     logger = logging.getLogger("test_eagi_app.logs_masked_transcript")
@@ -557,6 +602,7 @@ def test_run_eagi_session_does_not_create_audio_dump_when_disabled(tmp_path: Pat
             enabled=config.logging.enabled,
             log_level=config.logging.log_level,
             log_path=config.logging.log_path,
+            events_path=config.logging.events_path,
             log_transcript=config.logging.log_transcript,
             mask_phone_numbers=config.logging.mask_phone_numbers,
             debug_audio_dump_enabled=False,
@@ -564,6 +610,7 @@ def test_run_eagi_session_does_not_create_audio_dump_when_disabled(tmp_path: Pat
             rotate_max_bytes=config.logging.rotate_max_bytes,
             rotate_backup_count=config.logging.rotate_backup_count,
         ),
+        prompts=config.prompts,
         intents=config.intents,
     )
     logger = build_logger("test_eagi_app.dump_disabled")
@@ -604,6 +651,7 @@ def test_run_eagi_session_creates_audio_dump_when_enabled(tmp_path: Path) -> Non
             enabled=config.logging.enabled,
             log_level=config.logging.log_level,
             log_path=config.logging.log_path,
+            events_path=config.logging.events_path,
             log_transcript=config.logging.log_transcript,
             mask_phone_numbers=config.logging.mask_phone_numbers,
             debug_audio_dump_enabled=True,
@@ -611,6 +659,7 @@ def test_run_eagi_session_creates_audio_dump_when_enabled(tmp_path: Path) -> Non
             rotate_max_bytes=config.logging.rotate_max_bytes,
             rotate_backup_count=config.logging.rotate_backup_count,
         ),
+        prompts=config.prompts,
         intents=config.intents,
     )
     logger = build_logger("test_eagi_app.dump_enabled")
@@ -632,3 +681,68 @@ def test_run_eagi_session_creates_audio_dump_when_enabled(tmp_path: Path) -> Non
     assert dump_files[0].suffix == ".raw"
     assert "3001234567" not in dump_files[0].name
     assert dump_files[0].read_bytes() == audio_bytes
+
+
+def test_run_eagi_session_writes_structured_jsonl_event(tmp_path: Path) -> None:
+    session = FakeSession(
+        {
+            "agi_channel": "SIP/3001234567-00000009",
+            "agi_callerid": "3001234567",
+            "agi_uniqueid": "1716123456.999",
+            "agi_arg_2": "2",
+        }
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(
+            transcript="sí quiero hablar",
+            raw_messages=[{"text": "sí quiero hablar"}],
+            confidence=0.88,
+        )
+    )
+    service = build_service(vosk_client)
+    base_config = build_config()
+    events_path = tmp_path / "ivr-events.jsonl"
+    config = AppConfig(
+        audio=base_config.audio,
+        ivr=base_config.ivr,
+        asterisk=base_config.asterisk,
+        vosk=base_config.vosk,
+        logging=LoggingSettings(
+            enabled=base_config.logging.enabled,
+            log_level=base_config.logging.log_level,
+            log_path=base_config.logging.log_path,
+            events_path=str(events_path),
+            log_transcript=base_config.logging.log_transcript,
+            mask_phone_numbers=True,
+            debug_audio_dump_enabled=base_config.logging.debug_audio_dump_enabled,
+            debug_audio_dump_dir=base_config.logging.debug_audio_dump_dir,
+            rotate_max_bytes=base_config.logging.rotate_max_bytes,
+            rotate_backup_count=base_config.logging.rotate_backup_count,
+        ),
+        prompts=base_config.prompts,
+        intents=base_config.intents,
+    )
+    logger = build_logger("test_eagi_app.structured_event")
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=lambda fd, listen_seconds, sample_rate: b"\xff\x7f" * 400,
+        environment=session.environment,
+    )
+
+    written_lines = events_path.read_text(encoding="utf-8").splitlines()
+    written_event = json.loads(written_lines[0])
+
+    assert result == 0
+    assert len(written_lines) == 1
+    assert written_event["uniqueid"] == "1716123456.999"
+    assert written_event["intent"] == "SI"
+    assert written_event["state"] == "TRANSFERIR_A_ABOGADO"
+    assert written_event["attempts"] == 2
+    assert written_event["stop_reason"] == "eof"
+    assert written_event["source"] == "speech"
+    assert written_event["caller"] == "XXXXXXXX67"
+    assert "3001234567" not in written_event["channel"]
