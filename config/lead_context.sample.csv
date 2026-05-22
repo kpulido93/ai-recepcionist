@@ -1,0 +1,4 @@
+lead_id,phone_number,client_name,bank_name,portfolio_id,campaign_id,list_id
+lab-popular,1001,Juan Perez,Banco Popular,popular_mora_30,LAB-CAMP,LAB-LIST
+lab-bhd,1001,Maria Gomez,Banco BHD,bhd_mora_60,LAB-CAMP,LAB-LIST
+lab-reservas,1001,Carlos Diaz,Banco Reservas,reservas_mora_90,LAB-CAMP,LAB-LIST

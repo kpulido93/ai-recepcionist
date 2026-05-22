@@ -24,7 +24,7 @@ lead_context:
   csv_path: "lead_context.sample.csv"
 
 prompts:
-  personalized_greeting_enabled: false
+  personalized_greeting_enabled: true
   greeting_template: "Hola {client_name}, nos comunicamos de SokaCorp por una gestión pendiente relacionada con {bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
   greeting_template_without_name: "Hola, nos comunicamos de SokaCorp por una gestión pendiente relacionada con {bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
   greeting_fallback: "Hola, nos comunicamos de SokaCorp por una gestión pendiente. ¿Desea que le comuniquemos ahora? Le escucho."
@@ -42,7 +42,7 @@ prompts:
   cache_enabled: true
 
 name_audio:
-  enabled: false
+  enabled: true
   provider: "elevenlabs"
   cache_enabled: true
   cache_dir: "/var/lib/asterisk/sounds/custom/generated/names"
@@ -54,9 +54,10 @@ name_audio:
   fallback_on_error: true
   elevenlabs:
     api_key_env: "ELEVENLABS_API_KEY"
+    voice_id_env: "ELEVENLABS_VOICE_ID"
     voice_id: "IoWn77TsmQnza94sYlfg"
     model_id: "eleven_multilingual_v2"
-    output_format: "wav"
+    output_format: "mp3_44100_128"
     timeout_seconds: 15
 
 asterisk:

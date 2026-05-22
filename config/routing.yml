@@ -1,0 +1,24 @@
+default_transfer_target: "PJSIP/1002"
+allowed_target_patterns:
+  - "^PJSIP/[A-Za-z0-9_-]+$"
+  - "^Local/[A-Za-z0-9_-]+@[A-Za-z0-9_-]+$"
+
+portfolios:
+  popular_mora_30:
+    bank_names:
+      - "Banco Popular"
+      - "Popular"
+    transfer_target: "PJSIP/1002"
+
+  bhd_mora_60:
+    bank_names:
+      - "Banco BHD"
+      - "BHD"
+    transfer_target: "PJSIP/1003"
+
+  reservas_mora_90:
+    bank_names:
+      - "Banco Reservas"
+      - "Reservas"
+      - "Banreservas"
+    transfer_target: "PJSIP/1004"

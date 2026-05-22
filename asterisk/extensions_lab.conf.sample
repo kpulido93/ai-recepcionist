@@ -1,7 +1,7 @@
 ; Asterisk dialplan sample para laboratorio local.
 ; Objetivo:
 ; - Flujo principal voice-first con contexto de lead y saludo segmentado opcional.
-; - Transferencia local a la extension 1002 cuando la intencion es afirmativa.
+; - Transferencia local ruteada por cartera con fallback seguro a 1002.
 ; - INFO_COBRO indica interes en conocer el detalle del cobro o la deuda.
 ; - En laboratorio, INFO_COBRO y PROMESA_PAGO se transfieren igual que SI.
 ; - Un solo reintento para DUDA o SILENCIO.
@@ -15,7 +15,21 @@ exten => 1001,1,Dial(PJSIP/1001,20)
 exten => 1002,1,Dial(PJSIP/1002,20)
  same => n,Hangup()
 
+exten => 1003,1,Dial(PJSIP/1003,20)
+ same => n,Hangup()
+
+exten => 1004,1,Dial(PJSIP/1004,20)
+ same => n,Hangup()
+
 exten => 9900,1,Goto(ivr-cobranza-vosk,s,1)
+exten => 9901,1,Set(IVR_LEAD_ID=lab-popular)
+ same => n,Goto(ivr-cobranza-vosk,s,1)
+
+exten => 9902,1,Set(IVR_LEAD_ID=lab-bhd)
+ same => n,Goto(ivr-cobranza-vosk,s,1)
+
+exten => 9903,1,Set(IVR_LEAD_ID=lab-reservas)
+ same => n,Goto(ivr-cobranza-vosk,s,1)
 
 [ivr-cobranza-vosk]
 exten => s,1,NoOp(Inicio IVR cobranza Vosk laboratorio)
@@ -32,6 +46,7 @@ exten => s,1,NoOp(Inicio IVR cobranza Vosk laboratorio)
  same => n,Set(IVR_BANK_GREETING_AUDIO=)
  same => n,Set(IVR_GREETING_AUDIO=)
  same => n,Set(IVR_GREETING_FOLLOWUP_AUDIO=)
+ same => n,Set(IVR_TRANSFER_TARGET=)
  same => n,AGI(load_lead_context.py)
  same => n,AGI(generate_name_audio.py)
  same => n,AGI(generate_personalized_prompt.py)
@@ -73,7 +88,10 @@ exten => manejar-reintento,1,Set(TRY=$[${TRY}+1])
 exten => reintento,1,Playback(custom/no-entendi)
  same => n,Goto(s,start)
 
-exten => transferir-abogado,1,Dial(PJSIP/1002,20)
+exten => transferir-abogado,1,AGI(resolve_transfer_target.py)
+ same => n,Set(IVR_TRANSFER_TARGET=${IF($["${IVR_TRANSFER_TARGET}"=""]?PJSIP/1002:${IVR_TRANSFER_TARGET})})
+ same => n,Dial(${IVR_TRANSFER_TARGET},20)
+ same => n,NoOp(DIALSTATUS=${DIALSTATUS})
  same => n,Hangup()
 
 exten => documentar-callback,1,NoOp(Disposition laboratorio CALLBACK; en produccion puede rutear a agenda o callback queue)

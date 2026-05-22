@@ -1,17 +1,17 @@
 ; Asterisk PJSIP sample para laboratorio local.
 ; Objetivo:
-; - Registrar dos softphones SIP de prueba: 1001 y 1002.
+; - Registrar cuatro softphones SIP de prueba: 1001, 1002, 1003 y 1004.
 ; - Mantener un contexto aislado de laboratorio.
-; - Evitar secretos reales; reemplaza los passwords placeholder antes de usar.
+; - Usar solo credenciales de laboratorio.
 
-[transport-udp]
+[transport-lab-udp]
 type=transport
 protocol=udp
 bind=0.0.0.0:5060
 
 [1001]
 type=endpoint
-transport=transport-udp
+transport=transport-lab-udp
 context=lab-phones
 disallow=all
 allow=ulaw,alaw
@@ -26,16 +26,16 @@ rewrite_contact=yes
 type=auth
 auth_type=userpass
 username=1001
-password=REEMPLAZAR_PASSWORD_1001
+password=Lab1001Clave
 
 [1001]
 type=aor
-max_contacts=1
+max_contacts=2
 remove_existing=yes
 
 [1002]
 type=endpoint
-transport=transport-udp
+transport=transport-lab-udp
 context=lab-phones
 disallow=all
 allow=ulaw,alaw
@@ -50,9 +50,57 @@ rewrite_contact=yes
 type=auth
 auth_type=userpass
 username=1002
-password=REEMPLAZAR_PASSWORD_1002
+password=Lab1002Clave
 
 [1002]
 type=aor
-max_contacts=1
+max_contacts=2
+remove_existing=yes
+
+[1003]
+type=endpoint
+transport=transport-lab-udp
+context=lab-phones
+disallow=all
+allow=ulaw,alaw
+auth=1003
+aors=1003
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+
+[1003]
+type=auth
+auth_type=userpass
+username=1003
+password=Lab1003Clave
+
+[1003]
+type=aor
+max_contacts=2
+remove_existing=yes
+
+[1004]
+type=endpoint
+transport=transport-lab-udp
+context=lab-phones
+disallow=all
+allow=ulaw,alaw
+auth=1004
+aors=1004
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+
+[1004]
+type=auth
+auth_type=userpass
+username=1004
+password=Lab1004Clave
+
+[1004]
+type=aor
+max_contacts=2
 remove_existing=yes

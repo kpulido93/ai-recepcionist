@@ -26,6 +26,7 @@ DEFAULT_NAME_AUDIO_VERSION = "v1"
 DEFAULT_NAME_AUDIO_MAX_NAME_CHARS = 80
 DEFAULT_ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 DEFAULT_ELEVENLABS_API_KEY_ENV = "ELEVENLABS_API_KEY"
+DEFAULT_ELEVENLABS_VOICE_ID_ENV = "ELEVENLABS_VOICE_ID"
 DEFAULT_ELEVENLABS_TIMEOUT_SECONDS = 15
 
 
@@ -271,6 +272,13 @@ def _get_version(config: Mapping[str, object]) -> str:
 
 def _get_voice_id(config: Mapping[str, object]) -> str:
     elevenlabs_config = _get_elevenlabs_config(config)
+    voice_id_env = str(
+        elevenlabs_config.get("voice_id_env", DEFAULT_ELEVENLABS_VOICE_ID_ENV)
+    ).strip()
+    if voice_id_env:
+        voice_id_from_env = os.getenv(voice_id_env, "").strip()
+        if voice_id_from_env:
+            return voice_id_from_env
     voice_id = str(elevenlabs_config.get("voice_id", "")).strip()
     if not voice_id:
         raise ValueError("Falta voice_id para audio de nombre.")
