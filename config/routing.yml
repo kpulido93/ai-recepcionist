@@ -1,0 +1,14 @@
+default_transfer_target: "PJSIP/1002"
+
+portfolios:
+  banco_popular:
+    bank_names:
+      - "Banco Popular"
+      - "Popular"
+    transfer_target: "PJSIP/1002"
+
+  banco_bhd:
+    bank_names:
+      - "Banco BHD"
+      - "BHD"
+    transfer_target: "PJSIP/1003"

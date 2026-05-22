@@ -72,6 +72,28 @@ def test_agi_set_variable_removes_crlf_from_value() -> None:
     assert stdout.getvalue() == 'SET VARIABLE VOSK_TEXT "uno dos tres"\n'
 
 
+def test_get_variable_reads_channel_variable_value() -> None:
+    stdin = StringIO("200 result=1 (Banco Popular)\n")
+    stdout = StringIO()
+    session = AgiSession(stdin=stdin, stdout=stdout)
+
+    value = session.get_variable("IVR_BANK_NAME")
+
+    assert value == "Banco Popular"
+    assert stdout.getvalue() == "GET VARIABLE IVR_BANK_NAME\n"
+
+
+def test_get_variable_returns_none_when_channel_variable_is_missing() -> None:
+    stdin = StringIO("200 result=0\n")
+    stdout = StringIO()
+    session = AgiSession(stdin=stdin, stdout=stdout)
+
+    value = session.get_variable("IVR_BANK_NAME")
+
+    assert value is None
+    assert stdout.getvalue() == "GET VARIABLE IVR_BANK_NAME\n"
+
+
 def test_write_agi_result_sets_all_vosk_variables() -> None:
     session = FakeSession()
 

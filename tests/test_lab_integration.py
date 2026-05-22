@@ -15,6 +15,7 @@ from vicidial_vosk_cobranza_ivr.config import (
     AudioSettings,
     IvrSettings,
     LoggingSettings,
+    PromptsSettings,
     VoskSettings,
 )
 
@@ -90,12 +91,35 @@ def build_config() -> AppConfig:
             enabled=False,
             log_level="INFO",
             log_path="./logs/test.log",
+            events_path="",
             log_transcript=False,
             mask_phone_numbers=True,
             debug_audio_dump_enabled=False,
             debug_audio_dump_dir="/tmp",
             rotate_max_bytes=10485760,
             rotate_backup_count=10,
+        ),
+        prompts=PromptsSettings(
+            personalized_greeting_enabled=True,
+            greeting_template=(
+                "Hola {client_name}, nos comunicamos de SokaCorp por una gestion pendiente "
+                "relacionada con {bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
+            ),
+            greeting_template_without_name=(
+                "Hola, nos comunicamos de SokaCorp por una gestion pendiente relacionada con "
+                "{bank_name}. ¿Desea que le comuniquemos ahora? Le escucho."
+            ),
+            greeting_fallback=(
+                "Hola, nos comunicamos de SokaCorp por una gestion pendiente. "
+                "¿Desea que le comuniquemos ahora? Le escucho."
+            ),
+            generated_audio_dir="/tmp/generated",
+            generated_audio_playback_prefix="custom/generated",
+            tts_provider="espeak-ng",
+            tts_voice="es-la",
+            cache_enabled=True,
+            privacy_mode=False,
+            debug_log_values=False,
         ),
         intents={
             "SI": [

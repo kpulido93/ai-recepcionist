@@ -22,17 +22,25 @@ exten => s,1,NoOp(Inicio IVR cobranza Vosk laboratorio)
  same => n,Answer()
  same => n,Set(TRY=0)
  same => n,Set(MAX_RETRIES=1)
- same => n,Playback(custom/mensaje-cobranza)
+ same => n,Set(IVR_LEAD_ID=${IF($["${IVR_LEAD_ID}"=""]?lab-${UNIQUEID}:${IVR_LEAD_ID})})
+ ; Variables de ejemplo para laboratorio:
+ ; same => n,Set(IVR_CLIENT_NAME=Kevin)
+ ; same => n,Set(IVR_BANK_NAME=Banco Popular)
 
  same => n(start),Set(VOSK_TEXT=)
  same => n,Set(VOSK_INTENT=)
  same => n,Set(VOSK_CONFIDENCE=)
  same => n,Set(VOSK_SOURCE=)
- ; Prompt recomendado voice-first:
- ; "¿Lo transfiero ahora? Le escucho."
+ same => n,Set(IVR_TRANSFER_TARGET=)
+ same => n,Set(IVR_GREETING_AUDIO=)
+ ; El AGI puede devolver un saludo completo como:
+ ; "Hola Kevin, nos comunicamos de SokaCorp por una gestion pendiente relacionada con Banco Popular. ¿Desea que le comuniquemos ahora? Le escucho."
+ ; Si no hay datos del lead o la generacion falla, el sample cae a custom/mensaje-cobranza.
+ same => n,AGI(generate_personalized_prompt.py)
+ same => n,Set(IVR_GREETING_AUDIO=${IF($["${IVR_GREETING_AUDIO}"=""]?custom/mensaje-cobranza:${IVR_GREETING_AUDIO})})
  ; Si tu canal o softphone no permite barge-in real sobre Playback(),
- ; el caller debe responder al terminar el prompt.
- same => n,Playback(custom/pregunta-abogado)
+ ; el caller debe responder al terminar el prompt reproducido.
+ same => n,Playback(${IVR_GREETING_AUDIO})
 
  ; Fallback DTMF opcional. No es el camino principal del laboratorio.
  ; same => n,Read(OPCION,,1,,1,1)
@@ -63,7 +71,11 @@ exten => manejar-reintento,1,Set(TRY=$[${TRY}+1])
 exten => reintento,1,Playback(custom/no-entendi)
  same => n,Goto(s,start)
 
-exten => transferir-abogado,1,Dial(PJSIP/1002,20)
+exten => transferir-abogado,1,AGI(resolve_transfer_target.py)
+ same => n,Set(IVR_TRANSFER_TARGET=${IF($["${IVR_TRANSFER_TARGET}"=""]?PJSIP/1002:${IVR_TRANSFER_TARGET})})
+ same => n,Dial(${IVR_TRANSFER_TARGET},20)
+ same => n,Set(TRANSFER_STATUS=${DIALSTATUS})
+ same => n,NoOp(TRANSFER_STATUS=${TRANSFER_STATUS})
  same => n,Hangup()
 
 exten => documentar-callback,1,NoOp(Disposition laboratorio CALLBACK; en produccion puede rutear a agenda o callback queue)

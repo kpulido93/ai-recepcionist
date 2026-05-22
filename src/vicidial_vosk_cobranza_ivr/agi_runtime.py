@@ -40,6 +40,15 @@ class AgiSession:
         escaped_value = sanitize_agi_value(value)
         return self.command(f'SET VARIABLE {name} "{escaped_value}"')
 
+    def get_variable(self, name: str) -> str | None:
+        response = self.command(f"GET VARIABLE {name}")
+        result, value = parse_agi_response(response)
+        if result != "1":
+            return None
+        if value is None:
+            return None
+        return value
+
     def verbose(self, message: str, level: int = 1) -> None:
         escaped_message = sanitize_agi_value(message)
         self.command(f'VERBOSE "{escaped_message}" {level}')
@@ -62,10 +71,15 @@ class AgiSession:
 
 
 def parse_agi_result(response: str) -> str | None:
+    result, _ = parse_agi_response(response)
+    return result
+
+
+def parse_agi_response(response: str) -> tuple[str | None, str | None]:
     match = RESULT_PATTERN.search(response)
     if not match:
-        return None
-    return match.group(1)
+        return None, None
+    return match.group(1), match.group(2)
 
 
 def _read_agi_environment(stdin: TextIO) -> dict[str, str]:
