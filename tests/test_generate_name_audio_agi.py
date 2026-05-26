@@ -6,7 +6,7 @@ from types import ModuleType
 
 from pytest import MonkeyPatch
 
-from vicidial_vosk_cobranza_ivr.name_audio_cache import build_name_cache_key
+from vicidial_vosk_cobranza_ivr.name_audio_cache import build_name_audio_text, build_name_cache_key
 
 
 class FakeAgiSession:
@@ -45,6 +45,10 @@ name_audio:
   version: "v1"
   max_name_chars: 80
   fallback_on_error: true
+  templates:
+    male: "Señor {{name}},"
+    female: "Señora {{name}},"
+    unknown: "{{name}},"
   elevenlabs:
     api_key_env: "ELEVENLABS_API_KEY"
     voice_id: "voice-demo"
@@ -56,6 +60,18 @@ name_audio:
     )
 
 
+def name_audio_templates_config() -> dict[str, object]:
+    return {
+        "name_audio": {
+            "templates": {
+                "male": "Señor {name},",
+                "female": "Señora {name},",
+                "unknown": "{name},",
+            }
+        }
+    }
+
+
 def test_generate_name_audio_agi_sets_name_audio_when_cache_exists(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
@@ -64,13 +80,56 @@ def test_generate_name_audio_agi_sets_name_audio_when_cache_exists(
     cache_dir.mkdir(parents=True)
     config_path = tmp_path / "ivr.yml"
     write_config(config_path, cache_dir)
-    cache_key = build_name_cache_key("Juan Perez", "voice-demo", "model-demo", "v1")
+    config = name_audio_templates_config()
+    rendered_text = build_name_audio_text("Juan Perez", config, gender="unknown")
+    cache_key = build_name_cache_key(
+        "Juan Perez",
+        "voice-demo",
+        "model-demo",
+        "v1",
+        gender="unknown",
+        final_text=rendered_text,
+    )
     (cache_dir / f"{cache_key}.wav").write_bytes(b"wav")
     monkeypatch.setenv("VOSK_COBRANZA_CONFIG", str(config_path))
     module = load_agi_module()
     session = FakeAgiSession(
         {
             "GET VARIABLE IVR_CLIENT_NAME": "200 result=1 (Juan Perez)",
+        }
+    )
+
+    exit_code = module.run_generate_name_audio(session=session, environment={})
+
+    assert exit_code == 0
+    assert session.variables["IVR_NAME_AUDIO"] == f"custom/generated/names/{cache_key}"
+
+
+def test_generate_name_audio_agi_uses_gender_to_resolve_cache_key(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    cache_dir = tmp_path / "names"
+    cache_dir.mkdir(parents=True)
+    config_path = tmp_path / "ivr.yml"
+    write_config(config_path, cache_dir)
+    config = name_audio_templates_config()
+    rendered_text = build_name_audio_text("Juan Perez", config, gender="male")
+    cache_key = build_name_cache_key(
+        "Juan Perez",
+        "voice-demo",
+        "model-demo",
+        "v1",
+        gender="male",
+        final_text=rendered_text,
+    )
+    (cache_dir / f"{cache_key}.wav").write_bytes(b"wav")
+    monkeypatch.setenv("VOSK_COBRANZA_CONFIG", str(config_path))
+    module = load_agi_module()
+    session = FakeAgiSession(
+        {
+            "GET VARIABLE IVR_CLIENT_NAME": "200 result=1 (Juan Perez)",
+            "GET VARIABLE IVR_CLIENT_GENDER": "200 result=1 (male)",
         }
     )
 
@@ -94,7 +153,11 @@ def test_generate_name_audio_agi_sets_empty_when_generation_fails(
         }
     )
 
-    monkeypatch.setattr(module, "get_or_generate_name_audio", lambda name, config: None)
+    monkeypatch.setattr(
+        module,
+        "get_or_generate_name_audio",
+        lambda name, config, gender=None: None,
+    )
 
     exit_code = module.run_generate_name_audio(session=session, environment={})
 

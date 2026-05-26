@@ -24,10 +24,34 @@ DEFAULT_NAME_AUDIO_MIRROR_DIRS = ("/usr/share/asterisk/sounds/custom/generated/n
 DEFAULT_NAME_AUDIO_PLAYBACK_PREFIX = "custom/generated/names"
 DEFAULT_NAME_AUDIO_VERSION = "v1"
 DEFAULT_NAME_AUDIO_MAX_NAME_CHARS = 80
+DEFAULT_NAME_AUDIO_GENDER = "unknown"
+DEFAULT_NAME_AUDIO_TEMPLATE_MALE = "Señor {name},"
+DEFAULT_NAME_AUDIO_TEMPLATE_FEMALE = "Señora {name},"
+DEFAULT_NAME_AUDIO_TEMPLATE_UNKNOWN = "{name},"
+READABLE_AUDIO_FILE_MODE_BITS = 0o444
 DEFAULT_ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 DEFAULT_ELEVENLABS_API_KEY_ENV = "ELEVENLABS_API_KEY"
 DEFAULT_ELEVENLABS_VOICE_ID_ENV = "ELEVENLABS_VOICE_ID"
 DEFAULT_ELEVENLABS_TIMEOUT_SECONDS = 15
+NAME_AUDIO_GENDER_ALIASES = {
+    "m": "male",
+    "male": "male",
+    "masculino": "male",
+    "hombre": "male",
+    "senor": "male",
+    "señor": "male",
+    "f": "female",
+    "female": "female",
+    "femenino": "female",
+    "mujer": "female",
+    "senora": "female",
+    "señora": "female",
+    "u": "unknown",
+    "unknown": "unknown",
+    "desconocido": "unknown",
+    "desconocida": "unknown",
+    "otro": "unknown",
+}
 
 
 def normalize_person_name(name: str) -> str:
@@ -49,15 +73,60 @@ def safe_slug(value: str) -> str:
     return slug[:48] or "name"
 
 
-def build_name_cache_key(name: str, voice_id: str, model_id: str, version: str) -> str:
+def normalize_name_audio_gender(gender: str | None) -> str:
+    if gender is None:
+        return DEFAULT_NAME_AUDIO_GENDER
+
+    normalized_gender = normalize_person_name(gender).lower()
+    if not normalized_gender:
+        return DEFAULT_NAME_AUDIO_GENDER
+    return NAME_AUDIO_GENDER_ALIASES.get(normalized_gender, DEFAULT_NAME_AUDIO_GENDER)
+
+
+def build_name_audio_text(
+    name: str,
+    config: Mapping[str, object],
+    gender: str | None = None,
+) -> str:
+    name_audio_config = _resolve_name_audio_runtime_config(config)
+    normalized_name = _normalize_name_for_runtime(name, name_audio_config)
+    if not normalized_name:
+        raise ValueError("El nombre normalizado quedó vacío.")
+    return _render_name_audio_text(normalized_name, name_audio_config, gender)
+
+
+def build_name_cache_key(
+    name: str,
+    voice_id: str,
+    model_id: str,
+    version: str,
+    *,
+    gender: str | None = None,
+    final_text: str | None = None,
+) -> str:
     normalized_name = normalize_person_name(name)
-    slug = safe_slug(normalized_name)
-    digest_source = "|".join([normalized_name, voice_id.strip(), model_id.strip(), version.strip()])
+    normalized_gender = normalize_name_audio_gender(gender)
+    normalized_text = _normalize_rendered_text(final_text or normalized_name)
+    slug = safe_slug(normalized_text.rstrip(","))
+    digest_source = "|".join(
+        [
+            normalized_name,
+            normalized_gender,
+            normalized_text,
+            voice_id.strip(),
+            model_id.strip(),
+            version.strip(),
+        ]
+    )
     digest = hashlib.sha256(digest_source.encode("utf-8")).hexdigest()[:12]
     return f"{slug}-{digest}"
 
 
-def get_cached_name_audio(name: str, config: Mapping[str, object]) -> Path | None:
+def get_cached_name_audio(
+    name: str,
+    config: Mapping[str, object],
+    gender: str | None = None,
+) -> Path | None:
     name_audio_config = _get_name_audio_config(config)
     if not bool(name_audio_config.get("enabled", False)):
         return None
@@ -68,11 +137,14 @@ def get_cached_name_audio(name: str, config: Mapping[str, object]) -> Path | Non
     if not normalized_name:
         return None
 
+    rendered_text = _render_name_audio_text(normalized_name, name_audio_config, gender)
     cache_key = build_name_cache_key(
         normalized_name,
         _get_voice_id(name_audio_config),
         _get_model_id(name_audio_config),
         _get_version(name_audio_config),
+        gender=gender,
+        final_text=rendered_text,
     )
 
     for base_dir in _all_cache_dirs(name_audio_config):
@@ -82,7 +154,11 @@ def get_cached_name_audio(name: str, config: Mapping[str, object]) -> Path | Non
     return None
 
 
-def generate_name_audio(name: str, config: Mapping[str, object]) -> Path:
+def generate_name_audio(
+    name: str,
+    config: Mapping[str, object],
+    gender: str | None = None,
+) -> Path:
     name_audio_config = _get_name_audio_config(config)
     if not bool(name_audio_config.get("enabled", False)):
         raise ValueError("La generación de audio de nombre está desactivada.")
@@ -94,6 +170,7 @@ def generate_name_audio(name: str, config: Mapping[str, object]) -> Path:
     normalized_name = _normalize_name_for_runtime(name, name_audio_config)
     if not normalized_name:
         raise ValueError("El nombre normalizado quedó vacío.")
+    rendered_text = _render_name_audio_text(normalized_name, name_audio_config, gender)
 
     api_key = _read_api_key(name_audio_config)
     if not api_key:
@@ -106,6 +183,8 @@ def generate_name_audio(name: str, config: Mapping[str, object]) -> Path:
         _get_voice_id(name_audio_config),
         _get_model_id(name_audio_config),
         _get_version(name_audio_config),
+        gender=gender,
+        final_text=rendered_text,
     )
     final_output_path = _safe_output_path(cache_dir, f"{cache_key}.wav")
 
@@ -115,11 +194,11 @@ def generate_name_audio(name: str, config: Mapping[str, object]) -> Path:
         converted_tmp_path = Path(converted_tmp.name)
 
     try:
-        audio_bytes = _request_elevenlabs_audio(normalized_name, name_audio_config, api_key)
+        audio_bytes = _request_elevenlabs_audio(rendered_text, name_audio_config, api_key)
         source_tmp_path.write_bytes(audio_bytes)
         _convert_audio_to_wav(source_tmp_path, converted_tmp_path)
         os.replace(converted_tmp_path, final_output_path)
-        _mirror_name_audio(final_output_path, name_audio_config)
+        _sync_name_audio_artifacts(final_output_path, name_audio_config)
     finally:
         source_tmp_path.unlink(missing_ok=True)
         converted_tmp_path.unlink(missing_ok=True)
@@ -127,17 +206,21 @@ def generate_name_audio(name: str, config: Mapping[str, object]) -> Path:
     return final_output_path
 
 
-def get_or_generate_name_audio(name: str, config: Mapping[str, object]) -> Path | None:
+def get_or_generate_name_audio(
+    name: str,
+    config: Mapping[str, object],
+    gender: str | None = None,
+) -> Path | None:
     name_audio_config = _get_name_audio_config(config)
     if not bool(name_audio_config.get("enabled", False)):
         return None
 
-    cached_path = get_cached_name_audio(name, config)
-    if cached_path is not None:
-        return cached_path
-
     try:
-        return generate_name_audio(name, config)
+        cached_path = get_cached_name_audio(name, config, gender=gender)
+        if cached_path is not None:
+            _sync_name_audio_artifacts(cached_path, name_audio_config)
+            return cached_path
+        return generate_name_audio(name, config, gender=gender)
     except Exception:
         if bool(name_audio_config.get("fallback_on_error", True)):
             return None
@@ -151,6 +234,13 @@ def _get_name_audio_config(config: Mapping[str, object]) -> Mapping[str, object]
     return {}
 
 
+def _resolve_name_audio_runtime_config(config: Mapping[str, object]) -> Mapping[str, object]:
+    resolved_config = _get_name_audio_config(config)
+    if resolved_config:
+        return resolved_config
+    return config
+
+
 def _normalize_name_for_runtime(name: str, config: Mapping[str, object]) -> str:
     max_name_chars_value = config.get("max_name_chars", DEFAULT_NAME_AUDIO_MAX_NAME_CHARS)
     if isinstance(max_name_chars_value, int):
@@ -162,6 +252,49 @@ def _normalize_name_for_runtime(name: str, config: Mapping[str, object]) -> str:
 
     normalized_name = normalize_person_name(name)
     return normalized_name[:max_name_chars].strip()
+
+
+def _render_name_audio_text(name: str, config: Mapping[str, object], gender: str | None) -> str:
+    template = _get_name_audio_template(config, gender)
+    try:
+        rendered_text = template.format(name=name)
+    except KeyError as exc:
+        normalized_gender = normalize_name_audio_gender(gender)
+        raise ValueError(
+            f"Template de audio de nombre inválido para gender={normalized_gender}."
+        ) from exc
+    normalized_text = _normalize_rendered_text(rendered_text)
+    if not normalized_text:
+        raise ValueError("El saludo de audio de nombre quedó vacío.")
+    return normalized_text
+
+
+def _normalize_rendered_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKC", text)
+    normalized = CONTROL_CHARS_PATTERN.sub(" ", normalized)
+    normalized = WEIRD_SPACE_PATTERN.sub(" ", normalized)
+    normalized = MULTISPACE_PATTERN.sub(" ", normalized)
+    return normalized.strip()
+
+
+def _get_name_audio_template(config: Mapping[str, object], gender: str | None) -> str:
+    templates_config = config.get("templates")
+    normalized_gender = normalize_name_audio_gender(gender)
+    default_templates = {
+        "male": DEFAULT_NAME_AUDIO_TEMPLATE_MALE,
+        "female": DEFAULT_NAME_AUDIO_TEMPLATE_FEMALE,
+        "unknown": DEFAULT_NAME_AUDIO_TEMPLATE_UNKNOWN,
+    }
+    if not isinstance(templates_config, Mapping):
+        return default_templates[normalized_gender]
+
+    template_value = templates_config.get(normalized_gender)
+    if template_value is None:
+        template_value = default_templates[normalized_gender]
+    template = str(template_value).strip()
+    if not template:
+        return default_templates[normalized_gender]
+    return template
 
 
 def _read_api_key(config: Mapping[str, object]) -> str:
@@ -233,14 +366,22 @@ def _convert_audio_to_wav(source_path: Path, output_path: Path) -> None:
     )
 
 
-def _mirror_name_audio(source_path: Path, config: Mapping[str, object]) -> None:
-    mirror_dirs = _get_mirror_dirs(config)
-    if not mirror_dirs:
+def _sync_name_audio_artifacts(source_path: Path, config: Mapping[str, object]) -> None:
+    _ensure_audio_file_readable(source_path)
+    replica_dirs = _all_cache_dirs(config)
+    if not replica_dirs:
         return
-    try:
-        mirror_audio_file(source_path, mirror_dirs)
-    except OSError:
+    mirrored_paths = mirror_audio_file(source_path, replica_dirs)
+    for mirrored_path in mirrored_paths:
+        _ensure_audio_file_readable(mirrored_path)
+
+
+def _ensure_audio_file_readable(audio_path: Path) -> None:
+    current_mode = audio_path.stat().st_mode & 0o777
+    target_mode = current_mode | READABLE_AUDIO_FILE_MODE_BITS
+    if current_mode == target_mode:
         return
+    audio_path.chmod(target_mode)
 
 
 def _all_cache_dirs(config: Mapping[str, object]) -> tuple[Path, ...]:

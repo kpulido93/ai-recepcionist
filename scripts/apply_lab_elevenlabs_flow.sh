@@ -58,7 +58,7 @@ set -euo pipefail
 PROJECT_DIR="${PROJECT_DIR}"
 OPTIONAL_ENV_FILE="${ENV_FILE}"
 
-if [[ -f "\${OPTIONAL_ENV_FILE}" ]]; then
+if [[ -r "\${OPTIONAL_ENV_FILE}" ]]; then
   set -a
   # shellcheck disable=SC1090
   source "\${OPTIONAL_ENV_FILE}"

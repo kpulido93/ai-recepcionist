@@ -138,6 +138,26 @@ def test_mirror_audio_file_uses_custom_filename_and_skips_duplicate_dirs(tmp_pat
     assert (mirror_dir / "custom.wav").read_bytes() == b"demo-audio"
 
 
+def test_mirror_audio_file_supports_source_dir_as_one_of_the_targets(tmp_path: Path) -> None:
+    source_dir = tmp_path / "names"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "cached.wav"
+    mirror_dir = tmp_path / "mirror"
+    source_path.write_bytes(b"demo-audio")
+
+    mirrored_paths = mirror_audio_file(
+        source_path,
+        [source_dir, mirror_dir],
+    )
+
+    assert mirrored_paths == [
+        source_dir / "cached.wav",
+        mirror_dir / "cached.wav",
+    ]
+    assert source_path.read_bytes() == b"demo-audio"
+    assert (mirror_dir / "cached.wav").read_bytes() == b"demo-audio"
+
+
 def test_mirror_audio_file_requires_existing_source(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         mirror_audio_file(tmp_path / "missing.wav", [tmp_path / "mirror"])

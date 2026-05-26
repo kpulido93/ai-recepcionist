@@ -71,9 +71,13 @@ name_audio:
   mirror_dirs:
     - "/usr/share/asterisk/sounds/custom/generated/names"
   playback_prefix: "custom/generated/names"
-  version: "v1"
+  version: "v2-min-greeting"
   max_name_chars: 80
   fallback_on_error: true
+  templates:
+    male: "Señor {name},"
+    female: "Señora {name},"
+    unknown: "{name},"
   elevenlabs:
     api_key_env: "ELEVENLABS_API_KEY"
     voice_id_env: "ELEVENLABS_VOICE_ID"

@@ -10,7 +10,8 @@ Referencia operativa del ultimo despliegue estable validado en el servidor local
 
 - Fecha y hora: `2026-05-25 22:31 AST`
 - Ruta activa: `/opt/vicidial-vosk-cobranza-ivr`
-- Extension de prueba funcionando correctamente: `9910`
+- Extensiones de prueba funcionando correctamente: `9910` y `9911`
+- `9911` reproduce primero un saludo mínimo cacheado (`custom/generated/names/senor-kevin-99aa8b8fc2f0`, texto `Señor Kevin,`) y luego `custom/mensaje-cobranza`
 - La transferencia del contexto de prueba ya depende de `VOSK_TRANSFER_ELIGIBLE=1` o `VOSK_DECISION=TRANSFER`
 - Frases probadas que transfieren: `comunicame`, `quiero pagar`, `cuanto debo`
 - Frases probadas que no transfieren: `no`, `numero equivocado`, `no soy esa persona`
@@ -219,6 +220,15 @@ sudo tee /var/lib/asterisk/agi-bin/vosk_cobranza.py >/dev/null <<'EOF'
 set -euo pipefail
 
 PROJECT_DIR="/opt/vicidial-vosk-cobranza-ivr"
+OPTIONAL_ENV_FILE="/etc/default/vicidial-vosk-cobranza-ivr"
+
+if [[ -r "${OPTIONAL_ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${OPTIONAL_ENV_FILE}"
+  set +a
+fi
+
 export VOSK_COBRANZA_CONFIG="${PROJECT_DIR}/config/ivr.yml"
 export VOSK_COBRANZA_INTENTS="${PROJECT_DIR}/config/intents.yml"
 export VOSK_COBRANZA_LOGGING="${PROJECT_DIR}/config/logging.yml"
@@ -250,7 +260,7 @@ Objetivo minimo del laboratorio:
 Samples incluidos en el repo:
 
 - [asterisk/pjsip_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/pjsip_lab.conf.sample): endpoints PJSIP locales `1001` y `1002`, transporte UDP en `0.0.0.0:5060` y placeholders seguros.
-- [asterisk/extensions_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_lab.conf.sample): dialplan del laboratorio con `load_lead_context.py`, `generate_name_audio.py`, `generate_personalized_prompt.py`, `vosk_cobranza.py` y `resolve_transfer_target.py`, prioridad para `VOSK_TRANSFER_ELIGIBLE` y `VOSK_DECISION`, fallback a `PJSIP/1002`, un solo reintento para `DUDA`/`SILENCIO` y compatibilidad por `VOSK_INTENT`.
+- [asterisk/extensions_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_lab.conf.sample): dialplan del laboratorio con `load_lead_context.py`, `generate_name_audio.py`, `generate_personalized_prompt.py`, `vosk_cobranza.py` y `resolve_transfer_target.py`, prioridad para `VOSK_TRANSFER_ELIGIBLE` y `VOSK_DECISION`, fallback a `PJSIP/1002`, un solo reintento para `DUDA`/`SILENCIO`, compatibilidad por `VOSK_INTENT` y una extension `9911` de prueba aislada para reproducir un saludo mínimo cacheado antes del prompt de cobranza.
 - [asterisk/extensions_custom.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_custom.conf.sample): sample mas cercano al flujo futuro de integracion con VICIdial.
 
 Para el laboratorio local, carga primero `pjsip_lab.conf.sample` y `extensions_lab.conf.sample`. El sample `extensions_custom.conf.sample` queda como referencia para escenarios mas cercanos a produccion o a una integracion posterior con VICIdial.

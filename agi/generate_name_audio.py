@@ -75,10 +75,11 @@ def run_generate_name_audio(session: AgiSession, environment: dict[str, str]) ->
     config = load_name_audio_config()
     name_audio_value = ""
     client_name = _read_agi_or_env_value(session, environment, "IVR_CLIENT_NAME")
+    client_gender = _read_client_gender(session, environment)
 
     if client_name:
         try:
-            audio_path = get_or_generate_name_audio(client_name, config)
+            audio_path = get_or_generate_name_audio(client_name, config, gender=client_gender)
             if audio_path is not None:
                 name_audio_value = _build_playback_path(audio_path, config)
         except Exception as exc:
@@ -145,6 +146,14 @@ def _parse_get_variable_response(response: str) -> str | None:
         return None
     value = response.rsplit("(", 1)[1].rsplit(")", 1)[0]
     return sanitize_prompt_value(value) or None
+
+
+def _read_client_gender(session: AgiSession, environment: dict[str, str]) -> str | None:
+    for variable_name in ("IVR_CLIENT_GENDER", "IVR_GENDER"):
+        value = _read_agi_or_env_value(session, environment, variable_name)
+        if value:
+            return value
+    return None
 
 
 if __name__ == "__main__":
