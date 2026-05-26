@@ -6,7 +6,7 @@ import re
 import shutil
 import subprocess
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 CONTROL_CHARS_PATTERN = re.compile(r"[\x00-\x1f\x7f]+")
@@ -205,23 +205,36 @@ def get_greeting_followup_audio(config: Mapping[str, object]) -> str:
     )
 
 
-def mirror_audio_file(source_path: str | Path, mirror_dirs: list[str] | tuple[str, ...]) -> None:
+def mirror_audio_file(
+    source_path: str | Path,
+    mirror_dirs: Sequence[str | Path],
+    *,
+    filename: str | None = None,
+) -> list[Path]:
     resolved_source_path = Path(source_path).expanduser().resolve()
-    if not resolved_source_path.exists():
+    if not resolved_source_path.is_file():
         raise FileNotFoundError(resolved_source_path)
 
+    target_filename = filename or resolved_source_path.name
+    mirrored_paths: list[Path] = []
+    seen_dirs: set[Path] = set()
+
     for mirror_dir in mirror_dirs:
-        if not mirror_dir:
-            continue
         resolved_mirror_dir = Path(mirror_dir).expanduser().resolve()
+        if resolved_mirror_dir in seen_dirs:
+            continue
+        seen_dirs.add(resolved_mirror_dir)
         resolved_mirror_dir.mkdir(parents=True, exist_ok=True)
-        target_path = _safe_output_path(resolved_mirror_dir, resolved_source_path.name)
-        temp_path = target_path.with_suffix(".tmp.wav")
+        target_path = _safe_output_path(resolved_mirror_dir, target_filename)
+        temp_path = target_path.with_name(f".{target_path.name}.tmp")
         try:
             shutil.copy2(resolved_source_path, temp_path)
             os.replace(temp_path, target_path)
         finally:
             temp_path.unlink(missing_ok=True)
+        mirrored_paths.append(target_path)
+
+    return mirrored_paths
 
 
 def _get_prompts_config(config: Mapping[str, object]) -> Mapping[str, object]:

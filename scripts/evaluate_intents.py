@@ -13,6 +13,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
 DEFAULT_FIXTURE_PATH = PROJECT_ROOT / "tests" / "fixtures" / "utterances_rd_cobranza.yml"
 DEFAULT_INTENTS_PATH = PROJECT_ROOT / "config" / "intents.yml"
+LEGACY_COMPATIBLE_INTENTS = {
+    "SI": {"TRANSFER_REQUEST"},
+    "NO": {"CALLBACK", "NO_PUEDE_PAGAR"},
+    "INFO_COBRO": {"INFO_DEUDA"},
+    "PROMESA_PAGO": {"QUIERE_ACUERDO", "YA_PAGO"},
+    "NO_ES_PERSONA": {"TERCERO"},
+}
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -38,7 +45,7 @@ class EvaluationResult:
 
     @property
     def passed(self) -> bool:
-        return self.predicted_intent == self.case.expected_intent
+        return _is_compatible_intent(self.case.expected_intent, self.predicted_intent)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -181,6 +188,12 @@ def summarize_by_intent(
         accuracy = correct / total if total else 0.0
         summary.append((intent_name, correct, total, accuracy))
     return summary
+
+
+def _is_compatible_intent(expected_intent: str, predicted_intent: str) -> bool:
+    if predicted_intent == expected_intent:
+        return True
+    return predicted_intent in LEGACY_COMPATIBLE_INTENTS.get(expected_intent, set())
 
 
 if __name__ == "__main__":

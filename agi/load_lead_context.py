@@ -112,7 +112,17 @@ def run_load_lead_context(session: AgiSession, environment: dict[str, str]) -> i
             campaign_id=None,
             list_id=None,
         )
-        LOGGER.info("Contexto de lead no encontrado; se continuará sin datos personalizados.")
+        LOGGER.info("Contexto de lead no encontrado; se continuara sin datos personalizados.")
+    else:
+        LOGGER.info("Contexto de lead cargado.")
+        LOGGER.debug(
+            "Contexto de lead debug lead_id=%s phone=%s client=%s bank=%s portfolio=%s",
+            context.lead_id,
+            context.phone_number,
+            context.client_name,
+            context.bank_name,
+            context.portfolio_id,
+        )
 
     return _write_context_variables(session, context)
 
@@ -137,7 +147,7 @@ def _read_csv_path_from_config(config_path: Path) -> Path | None:
         with config_path.open("r", encoding="utf-8") as file_handler:
             config_data = yaml.safe_load(file_handler) or {}
     except OSError as exc:
-        LOGGER.warning("No fue posible leer configuración IVR para contexto de lead: %s", exc)
+        LOGGER.warning("No fue posible leer configuracion IVR para contexto de lead: %s", exc)
         return None
 
     if not isinstance(config_data, dict):

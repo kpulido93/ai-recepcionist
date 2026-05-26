@@ -1,12 +1,12 @@
 ; Asterisk dialplan sample para laboratorio local.
 ; Objetivo:
-; - Flujo principal voice-first con contexto de lead y saludo segmentado opcional.
+; - Flujo principal voice-first con contexto de lead, audio de nombre opcional y saludo personalizado.
 ; - Transferencia local ruteada por cartera con fallback seguro a 1002.
-; - INFO_COBRO indica interes en conocer el detalle del cobro o la deuda.
-; - En laboratorio, INFO_COBRO y PROMESA_PAGO se transfieren igual que SI.
+; - El motor nuevo prioriza VOSK_TRANSFER_ELIGIBLE y VOSK_DECISION.
+; - Se conserva fallback por VOSK_INTENT para compatibilidad.
+; - INFO_COBRO y PROMESA_PAGO se transfieren igual que SI.
 ; - Un solo reintento para DUDA o SILENCIO.
-; - Sin ingroups reales ni dependencias de VICIdial.
-; - Sin "lo comunico" por defecto para reducir latencia.
+; - Sin ingroups reales ni cambios sobre /etc/asterisk del host.
 
 [lab-phones]
 exten => 1001,1,Dial(PJSIP/1001,20)
@@ -36,12 +36,28 @@ exten => s,1,NoOp(Inicio IVR cobranza Vosk laboratorio)
  same => n,Answer()
  same => n,Set(TRY=0)
  same => n,Set(MAX_RETRIES=1)
- same => n,Set(IVR_PHONE_NUMBER=${CALLERID(num)})
 
- same => n(start),Set(VOSK_TEXT=)
+ ; Variables de laboratorio para pruebas locales.
+ ; Recomendado: descomenta IVR_LEAD_ID y prepara config/lead_context.sample.csv
+ ; para que load_lead_context.py complete nombre, banco y cartera.
+ ; same => n,Set(IVR_LEAD_ID=lab-001)
+ ; same => n,Set(IVR_PHONE_NUMBER=${CALLERID(num)})
+ ; Si quieres forzar datos sin CSV, comenta temporalmente AGI(load_lead_context.py)
+ ; y descomenta tambien estas lineas:
+ ; same => n,Set(IVR_CLIENT_NAME=Juan)
+ ; same => n,Set(IVR_BANK_NAME=Banco Popular)
+ ; same => n,Set(IVR_PORTFOLIO_ID=popular_mora_30)
+
+ same => n(start),Set(IVR_PHONE_NUMBER=${IF($["${IVR_PHONE_NUMBER}"=""]?${CALLERID(num)}:${IVR_PHONE_NUMBER})})
+ same => n,Set(VOSK_TEXT=)
  same => n,Set(VOSK_INTENT=)
  same => n,Set(VOSK_CONFIDENCE=)
  same => n,Set(VOSK_SOURCE=)
+ same => n,Set(VOSK_DECISION=)
+ same => n,Set(VOSK_TRANSFER_ELIGIBLE=)
+ same => n,Set(VOSK_BLOCK_REASON=)
+ same => n,Set(VOSK_FINAL_DISPOSITION=)
+ same => n,Set(VOSK_MATCHED_VALUE=)
  same => n,Set(IVR_NAME_AUDIO=)
  same => n,Set(IVR_BANK_GREETING_AUDIO=)
  same => n,Set(IVR_GREETING_AUDIO=)
@@ -68,8 +84,17 @@ exten => capturar-respuesta,1,NoOp(Captura de respuesta IVR voice-first)
  same => n,Set(VOSK_INTENT=${IF($["${VOSK_INTENT}"=""]?DUDA:${VOSK_INTENT})})
  same => n,Set(VOSK_CONFIDENCE=${IF($["${VOSK_CONFIDENCE}"=""]?0.00:${VOSK_CONFIDENCE})})
  same => n,Set(VOSK_SOURCE=${IF($["${VOSK_SOURCE}"=""]?speech:${VOSK_SOURCE})})
- same => n,NoOp(VOSK_TEXT=${VOSK_TEXT} VOSK_INTENT=${VOSK_INTENT} VOSK_CONFIDENCE=${VOSK_CONFIDENCE} VOSK_SOURCE=${VOSK_SOURCE})
+ same => n,Set(VOSK_DECISION=${IF($["${VOSK_DECISION}"=""]?RETRY:${VOSK_DECISION})})
+ same => n,Set(VOSK_TRANSFER_ELIGIBLE=${IF($["${VOSK_TRANSFER_ELIGIBLE}"=""]?0:${VOSK_TRANSFER_ELIGIBLE})})
+ same => n,NoOp(VOSK_TEXT=${VOSK_TEXT} VOSK_INTENT=${VOSK_INTENT} VOSK_CONFIDENCE=${VOSK_CONFIDENCE} VOSK_SOURCE=${VOSK_SOURCE} VOSK_DECISION=${VOSK_DECISION} VOSK_TRANSFER_ELIGIBLE=${VOSK_TRANSFER_ELIGIBLE})
 
+ same => n,GotoIf($["${VOSK_TRANSFER_ELIGIBLE}"="1"]?transferir-abogado,1)
+ same => n,GotoIf($["${VOSK_DECISION}"="TRANSFER"]?transferir-abogado,1)
+ same => n,GotoIf($["${VOSK_DECISION}"="RETRY"]?manejar-reintento,1)
+ same => n,GotoIf($["${VOSK_DECISION}"="HANGUP"]?finalizar,1)
+ same => n,GotoIf($["${VOSK_DECISION}"="NO_TRANSFER"]?resolver-no-transfer,1)
+
+ ; Fallback de compatibilidad basado en intents.
  same => n,GotoIf($["${VOSK_INTENT}"="SI"]?transferir-abogado,1)
  same => n,GotoIf($["${VOSK_INTENT}"="INFO_COBRO"]?transferir-abogado,1)
  same => n,GotoIf($["${VOSK_INTENT}"="PROMESA_PAGO"]?transferir-abogado,1)
@@ -79,7 +104,12 @@ exten => capturar-respuesta,1,NoOp(Captura de respuesta IVR voice-first)
  same => n,GotoIf($["${VOSK_INTENT}"="NO_ES_PERSONA"]?documentar-no-es-persona,1)
  same => n,GotoIf($["${VOSK_INTENT}"="DUDA"]?manejar-reintento,1)
  same => n,GotoIf($["${VOSK_INTENT}"="SILENCIO"]?manejar-reintento,1)
- same => n,Goto(manejar-reintento,1)
+ same => n,Goto(finalizar,1)
+
+exten => resolver-no-transfer,1,GotoIf($["${VOSK_INTENT}"="CALLBACK"]?documentar-callback,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="NUMERO_EQUIVOCADO"]?documentar-numero-equivocado,1)
+ same => n,GotoIf($["${VOSK_INTENT}"="NO_ES_PERSONA"]?documentar-no-es-persona,1)
+ same => n,Goto(finalizar,1)
 
 exten => manejar-reintento,1,Set(TRY=$[${TRY}+1])
  same => n,GotoIf($[${TRY} <= ${MAX_RETRIES}]?reintento,1)

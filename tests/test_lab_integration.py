@@ -157,7 +157,7 @@ def build_logger(name: str) -> logging.Logger:
 
 
 def build_agi_session() -> tuple[AgiSession, StringIO]:
-    stdin = StringIO("200 result=1\n" * 8)
+    stdin = StringIO("200 result=1\n" * 20)
     stdout = StringIO()
     return AgiSession(stdin=stdin, stdout=stdout), stdout
 
@@ -167,10 +167,16 @@ def extract_agi_commands(stdout: StringIO) -> list[str]:
 
 
 def assert_required_set_variable_commands(commands: list[str]) -> None:
-    assert commands[0].startswith('SET VARIABLE VOSK_TEXT "')
-    assert commands[1].startswith('SET VARIABLE VOSK_INTENT "')
-    assert commands[2].startswith('SET VARIABLE VOSK_CONFIDENCE "')
-    assert commands[3].startswith('SET VARIABLE VOSK_SOURCE "')
+    set_commands = [command for command in commands if command.startswith("SET VARIABLE ")]
+    assert set_commands[0].startswith('SET VARIABLE VOSK_TEXT "')
+    assert set_commands[1].startswith('SET VARIABLE VOSK_INTENT "')
+    assert set_commands[2].startswith('SET VARIABLE VOSK_CONFIDENCE "')
+    assert set_commands[3].startswith('SET VARIABLE VOSK_SOURCE "')
+    assert set_commands[4].startswith('SET VARIABLE VOSK_DECISION "')
+    assert set_commands[5].startswith('SET VARIABLE VOSK_TRANSFER_ELIGIBLE "')
+    assert set_commands[6].startswith('SET VARIABLE VOSK_BLOCK_REASON "')
+    assert set_commands[7].startswith('SET VARIABLE VOSK_FINAL_DISPOSITION "')
+    assert set_commands[8].startswith('SET VARIABLE VOSK_MATCHED_VALUE "')
 
 
 def test_lab_integration_sets_si_from_partial_audio(monkeypatch) -> None:
@@ -210,6 +216,8 @@ def test_lab_integration_sets_si_from_partial_audio(monkeypatch) -> None:
     assert 'SET VARIABLE VOSK_TEXT "si"' in commands
     assert 'SET VARIABLE VOSK_INTENT "SI"' in commands
     assert 'SET VARIABLE VOSK_CONFIDENCE "1.00"' in commands
+    assert 'SET VARIABLE VOSK_SOURCE "transcript"' in commands
+    assert 'SET VARIABLE VOSK_DECISION "TRANSFER"' in commands
 
 
 def test_lab_integration_sets_no_from_negative_partial(monkeypatch) -> None:
@@ -246,6 +254,8 @@ def test_lab_integration_sets_no_from_negative_partial(monkeypatch) -> None:
     assert_required_set_variable_commands(commands)
     assert 'SET VARIABLE VOSK_TEXT "no me transfiera"' in commands
     assert 'SET VARIABLE VOSK_INTENT "NO"' in commands
+    assert 'SET VARIABLE VOSK_SOURCE "transcript"' in commands
+    assert 'SET VARIABLE VOSK_DECISION "NO_TRANSFER"' in commands
 
 
 def test_lab_integration_sets_silencio_when_audio_is_empty() -> None:
@@ -274,6 +284,7 @@ def test_lab_integration_sets_silencio_when_audio_is_empty() -> None:
     assert 'SET VARIABLE VOSK_TEXT ""' in commands
     assert 'SET VARIABLE VOSK_INTENT "SILENCIO"' in commands
     assert 'SET VARIABLE VOSK_CONFIDENCE "0.00"' in commands
+    assert 'SET VARIABLE VOSK_DECISION "RETRY"' in commands
 
 
 def test_lab_integration_sets_info_cobro_from_informational_phrase(monkeypatch) -> None:

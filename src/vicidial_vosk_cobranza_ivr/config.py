@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +42,14 @@ DEFAULT_TTS_VOICE = "es-la"
 DEFAULT_PROMPTS_CACHE_ENABLED = True
 DEFAULT_PROMPTS_PRIVACY_MODE = False
 DEFAULT_PROMPTS_DEBUG_LOG_VALUES = False
+DEFAULT_SEMANTIC_CLASSIFIER_ENABLED = True
+DEFAULT_SEMANTIC_FUZZY_ENABLED = True
+DEFAULT_SEMANTIC_ENABLED = False
+DEFAULT_FUZZY_THRESHOLD = 0.78
+DEFAULT_SEMANTIC_THRESHOLD = 0.72
+DEFAULT_SEMANTIC_MIN_CONFIDENCE = 0.70
+DEFAULT_SEMANTIC_INTENTS_PATH = "semantic_intents.yml"
+DEFAULT_INITIAL_TIMEOUT_SECONDS = 5.0
 
 
 class ConfigError(RuntimeError):
@@ -76,6 +84,29 @@ class IvrSettings:
     rms_speech_threshold: float
     max_dtmf_wait_ms: int
     dtmf_map: dict[str, str]
+    listen_profiles: ListenProfilesSettings = field(
+        default_factory=lambda: build_default_listen_profiles(
+            listen_seconds=DEFAULT_IVR_LISTEN_SECONDS,
+            min_speech_ms=DEFAULT_MIN_SPEECH_MS,
+            silence_after_speech_ms=DEFAULT_SILENCE_AFTER_SPEECH_MS,
+            early_detection_min_audio_ms=DEFAULT_EARLY_DETECTION_MIN_AUDIO_MS,
+        )
+    )
+
+
+@dataclass(frozen=True)
+class ListenAttemptSettings:
+    initial_timeout_seconds: float
+    max_listen_seconds: int
+    silence_after_speech_ms: int
+    min_speech_ms: int
+    early_detection_min_audio_ms: int
+
+
+@dataclass(frozen=True)
+class ListenProfilesSettings:
+    first_attempt: ListenAttemptSettings
+    retry_attempt: ListenAttemptSettings
 
 
 @dataclass(frozen=True)
@@ -129,6 +160,17 @@ class PromptsSettings:
 
 
 @dataclass(frozen=True)
+class SemanticClassifierSettings:
+    enabled: bool = DEFAULT_SEMANTIC_CLASSIFIER_ENABLED
+    fuzzy_enabled: bool = DEFAULT_SEMANTIC_FUZZY_ENABLED
+    semantic_enabled: bool = DEFAULT_SEMANTIC_ENABLED
+    fuzzy_threshold: float = DEFAULT_FUZZY_THRESHOLD
+    semantic_threshold: float = DEFAULT_SEMANTIC_THRESHOLD
+    min_confidence: float = DEFAULT_SEMANTIC_MIN_CONFIDENCE
+    intents_path: str = DEFAULT_SEMANTIC_INTENTS_PATH
+
+
+@dataclass(frozen=True)
 class AppConfig:
     audio: AudioSettings
     ivr: IvrSettings
@@ -137,6 +179,10 @@ class AppConfig:
     logging: LoggingSettings
     prompts: PromptsSettings
     intents: dict[str, list[str]]
+    semantic_classifier: SemanticClassifierSettings = field(
+        default_factory=SemanticClassifierSettings
+    )
+    semantic_intents: dict[str, dict[str, list[str]]] = field(default_factory=dict)
 
 
 def resolve_runtime_paths(
@@ -182,7 +228,13 @@ def load_app_config(
     vosk_config = _get_section(raw_config, "vosk")
     logging_config = _get_section(raw_config, "logging")
     prompts_config = _get_section(raw_config, "prompts")
+    semantic_classifier_config = _get_optional_section(raw_config, "semantic_classifier")
     sample_rate = _resolve_sample_rate(ivr_config, vosk_config)
+    semantic_settings = _build_semantic_classifier_settings(semantic_classifier_config)
+    semantic_intents = _load_semantic_intents(
+        config_path=config_path,
+        semantic_settings=semantic_settings,
+    )
 
     try:
         return AppConfig(
@@ -222,6 +274,7 @@ def load_app_config(
                 dtmf_map={
                     str(key): str(value).upper() for key, value in ivr_config["dtmf_map"].items()
                 },
+                listen_profiles=_build_listen_profiles_settings(ivr_config),
             ),
             asterisk=AsteriskSettings(
                 app_name=str(asterisk_config["app_name"]),
@@ -308,6 +361,8 @@ def load_app_config(
                 str(intent_name).upper(): [str(phrase) for phrase in phrase_list]
                 for intent_name, phrase_list in raw_intents.items()
             },
+            semantic_classifier=semantic_settings,
+            semantic_intents=semantic_intents,
         )
     except KeyError as exc:
         raise ConfigError(f"Falta la clave de configuracion: {exc}") from exc
@@ -335,6 +390,12 @@ def _load_yaml_file(path: Path) -> dict[str, Any]:
         raise ConfigError(f"El YAML debe contener un objeto en la raiz: {path}")
 
     return data
+
+
+def _load_optional_yaml_file(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    return _load_yaml_file(path)
 
 
 def _apply_env_overrides(config_data: dict[str, Any]) -> None:
@@ -378,8 +439,173 @@ def _get_section(config_data: dict[str, Any], section_name: str) -> dict[str, An
     return section
 
 
+def _get_optional_section(config_data: dict[str, Any], section_name: str) -> dict[str, Any]:
+    section = config_data.get(section_name, {})
+    if section is None:
+        return {}
+    if not isinstance(section, dict):
+        raise ConfigError(f"La seccion '{section_name}' debe ser un objeto YAML.")
+    return section
+
+
 def _resolve_sample_rate(ivr_config: dict[str, Any], vosk_config: dict[str, Any]) -> int:
     return int(ivr_config.get("sample_rate", vosk_config.get("sample_rate", DEFAULT_SAMPLE_RATE)))
+
+
+def _build_semantic_classifier_settings(
+    semantic_config: dict[str, Any],
+) -> SemanticClassifierSettings:
+    return SemanticClassifierSettings(
+        enabled=bool(semantic_config.get("enabled", DEFAULT_SEMANTIC_CLASSIFIER_ENABLED)),
+        fuzzy_enabled=bool(semantic_config.get("fuzzy_enabled", DEFAULT_SEMANTIC_FUZZY_ENABLED)),
+        semantic_enabled=bool(semantic_config.get("semantic_enabled", DEFAULT_SEMANTIC_ENABLED)),
+        fuzzy_threshold=float(semantic_config.get("fuzzy_threshold", DEFAULT_FUZZY_THRESHOLD)),
+        semantic_threshold=float(
+            semantic_config.get("semantic_threshold", DEFAULT_SEMANTIC_THRESHOLD)
+        ),
+        min_confidence=float(
+            semantic_config.get("min_confidence", DEFAULT_SEMANTIC_MIN_CONFIDENCE)
+        ),
+        intents_path=str(semantic_config.get("intents_path", DEFAULT_SEMANTIC_INTENTS_PATH)),
+    )
+
+
+def build_default_listen_profiles(
+    *,
+    listen_seconds: int,
+    min_speech_ms: int,
+    silence_after_speech_ms: int,
+    early_detection_min_audio_ms: int,
+) -> ListenProfilesSettings:
+    initial_timeout_seconds = max(float(listen_seconds), DEFAULT_INITIAL_TIMEOUT_SECONDS)
+    base_attempt = ListenAttemptSettings(
+        initial_timeout_seconds=initial_timeout_seconds,
+        max_listen_seconds=listen_seconds,
+        silence_after_speech_ms=silence_after_speech_ms,
+        min_speech_ms=min_speech_ms,
+        early_detection_min_audio_ms=early_detection_min_audio_ms,
+    )
+    return ListenProfilesSettings(
+        first_attempt=base_attempt,
+        retry_attempt=base_attempt,
+    )
+
+
+def _build_listen_profiles_settings(ivr_config: dict[str, Any]) -> ListenProfilesSettings:
+    listen_seconds = int(ivr_config.get("listen_seconds", DEFAULT_IVR_LISTEN_SECONDS))
+    min_speech_ms = int(ivr_config.get("min_speech_ms", DEFAULT_MIN_SPEECH_MS))
+    silence_after_speech_ms = int(
+        ivr_config.get("silence_after_speech_ms", DEFAULT_SILENCE_AFTER_SPEECH_MS)
+    )
+    early_detection_min_audio_ms = int(
+        ivr_config.get(
+            "early_detection_min_audio_ms",
+            DEFAULT_EARLY_DETECTION_MIN_AUDIO_MS,
+        )
+    )
+    defaults = build_default_listen_profiles(
+        listen_seconds=listen_seconds,
+        min_speech_ms=min_speech_ms,
+        silence_after_speech_ms=silence_after_speech_ms,
+        early_detection_min_audio_ms=early_detection_min_audio_ms,
+    )
+    raw_listen_config = ivr_config.get("listen", {})
+    if not isinstance(raw_listen_config, dict):
+        raise ConfigError("La seccion 'ivr.listen' debe ser un objeto YAML.")
+
+    return ListenProfilesSettings(
+        first_attempt=_build_listen_attempt_settings(
+            raw_listen_config.get("first_attempt", {}),
+            defaults.first_attempt,
+        ),
+        retry_attempt=_build_listen_attempt_settings(
+            raw_listen_config.get("retry_attempt", {}),
+            defaults.retry_attempt,
+        ),
+    )
+
+
+def _build_listen_attempt_settings(
+    raw_attempt_config: object,
+    defaults: ListenAttemptSettings,
+) -> ListenAttemptSettings:
+    if raw_attempt_config is None:
+        return defaults
+    if not isinstance(raw_attempt_config, dict):
+        raise ConfigError("Cada perfil de escucha debe ser un objeto YAML.")
+
+    return ListenAttemptSettings(
+        initial_timeout_seconds=float(
+            raw_attempt_config.get(
+                "initial_timeout_seconds",
+                defaults.initial_timeout_seconds,
+            )
+        ),
+        max_listen_seconds=int(
+            raw_attempt_config.get("max_listen_seconds", defaults.max_listen_seconds)
+        ),
+        silence_after_speech_ms=int(
+            raw_attempt_config.get(
+                "silence_after_speech_ms",
+                defaults.silence_after_speech_ms,
+            )
+        ),
+        min_speech_ms=int(raw_attempt_config.get("min_speech_ms", defaults.min_speech_ms)),
+        early_detection_min_audio_ms=int(
+            raw_attempt_config.get(
+                "early_detection_min_audio_ms",
+                defaults.early_detection_min_audio_ms,
+            )
+        ),
+    )
+
+
+def _load_semantic_intents(
+    *,
+    config_path: Path,
+    semantic_settings: SemanticClassifierSettings,
+) -> dict[str, dict[str, list[str]]]:
+    intents_path = _resolve_semantic_intents_path(config_path, semantic_settings.intents_path)
+    raw_semantic_intents = _load_optional_yaml_file(intents_path)
+    if raw_semantic_intents is None:
+        return {}
+
+    normalized_intents: dict[str, dict[str, list[str]]] = {}
+    for raw_intent_name, raw_values in raw_semantic_intents.items():
+        intent_name = str(raw_intent_name).upper()
+
+        if isinstance(raw_values, dict):
+            canonical = _string_list(raw_values.get("canonical", []))
+            aliases = _string_list(raw_values.get("aliases", []))
+        elif isinstance(raw_values, list):
+            canonical = _string_list(raw_values)
+            aliases = []
+        else:
+            raise ConfigError(
+                f"El intent semantico {raw_intent_name} debe contener un objeto o una lista."
+            )
+
+        normalized_intents[intent_name] = {
+            "canonical": canonical,
+            "aliases": aliases,
+        }
+
+    return normalized_intents
+
+
+def _resolve_semantic_intents_path(config_path: Path, intents_path: str) -> Path:
+    raw_path = Path(intents_path).expanduser()
+    if raw_path.is_absolute():
+        return raw_path.resolve()
+    return (config_path.parent / raw_path).resolve()
+
+
+def _string_list(raw_values: object) -> list[str]:
+    if raw_values is None:
+        return []
+    if not isinstance(raw_values, list):
+        raise ConfigError("Las frases semanticas deben venir en una lista YAML.")
+    return [str(value) for value in raw_values]
 
 
 def _resolve_debug_audio_dump_enabled(

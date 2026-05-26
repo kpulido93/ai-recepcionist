@@ -35,7 +35,12 @@ rm -rf "${INSTALL_DIR}/.mypy_cache" "${INSTALL_DIR}/.ruff_cache"
 "${INSTALL_DIR}/.venv/bin/pip" install "${INSTALL_DIR}"
 
 ln -sf "${INSTALL_DIR}/agi/vosk_cobranza.py" "${AGI_BIN_DIR}/vosk_cobranza.py"
-chmod 755 "${INSTALL_DIR}/agi/vosk_cobranza.py" "${AGI_BIN_DIR}/vosk_cobranza.py"
+ln -sf "${INSTALL_DIR}/agi/resolve_transfer_target.py" "${AGI_BIN_DIR}/resolve_transfer_target.py"
+chmod 755 \
+  "${INSTALL_DIR}/agi/vosk_cobranza.py" \
+  "${AGI_BIN_DIR}/vosk_cobranza.py" \
+  "${INSTALL_DIR}/agi/resolve_transfer_target.py" \
+  "${AGI_BIN_DIR}/resolve_transfer_target.py"
 
 touch /var/log/asterisk/vosk_cobranza.log
 chown -R root:"${ASTERISK_GROUP}" "${INSTALL_DIR}"
@@ -46,7 +51,7 @@ cat <<EOF
 Instalacion base completada.
 
 Proyecto: ${INSTALL_DIR}
-AGI: ${AGI_BIN_DIR}/vosk_cobranza.py
+AGIs: ${AGI_BIN_DIR}/vosk_cobranza.py, ${AGI_BIN_DIR}/resolve_transfer_target.py
 Log: /var/log/asterisk/vosk_cobranza.log
 
 Siguientes pasos:

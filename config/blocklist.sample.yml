@@ -1,0 +1,9 @@
+abusive_language:
+  enabled: true
+  terms: []
+  phrases: []
+
+verbal_threats:
+  enabled: true
+  terms: []
+  phrases: []

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from vicidial_vosk_cobranza_ivr.prompt_builder import (
     build_bank_greeting_audio,
     build_cache_key,
     build_greeting_text,
+    mirror_audio_file,
     sanitize_prompt_value,
 )
 
@@ -99,3 +102,42 @@ def test_build_bank_greeting_audio_returns_existing_asset(tmp_path: Path) -> Non
     playback_audio = build_bank_greeting_audio("Banco Uno", config)
 
     assert playback_audio == "custom/gestion-banco-uno"
+
+
+def test_mirror_audio_file_copies_source_into_all_target_dirs(tmp_path: Path) -> None:
+    source_path = tmp_path / "source.wav"
+    mirror_dir_one = tmp_path / "mirror-one"
+    mirror_dir_two = tmp_path / "mirror-two"
+    source_path.write_bytes(b"demo-audio")
+
+    mirrored_paths = mirror_audio_file(
+        source_path,
+        [mirror_dir_one, mirror_dir_two],
+    )
+
+    assert mirrored_paths == [
+        mirror_dir_one / "source.wav",
+        mirror_dir_two / "source.wav",
+    ]
+    assert (mirror_dir_one / "source.wav").read_bytes() == b"demo-audio"
+    assert (mirror_dir_two / "source.wav").read_bytes() == b"demo-audio"
+
+
+def test_mirror_audio_file_uses_custom_filename_and_skips_duplicate_dirs(tmp_path: Path) -> None:
+    source_path = tmp_path / "source.wav"
+    mirror_dir = tmp_path / "mirror"
+    source_path.write_bytes(b"demo-audio")
+
+    mirrored_paths = mirror_audio_file(
+        source_path,
+        [mirror_dir, mirror_dir],
+        filename="custom.wav",
+    )
+
+    assert mirrored_paths == [mirror_dir / "custom.wav"]
+    assert (mirror_dir / "custom.wav").read_bytes() == b"demo-audio"
+
+
+def test_mirror_audio_file_requires_existing_source(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        mirror_audio_file(tmp_path / "missing.wav", [tmp_path / "mirror"])

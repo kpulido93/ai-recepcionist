@@ -14,11 +14,20 @@ def write_text(path: Path, content: str) -> None:
 def test_load_app_config_reads_yaml(tmp_path: Path) -> None:
     config_path = tmp_path / "ivr.yml"
     intents_path = tmp_path / "intents.yml"
+    semantic_intents_path = tmp_path / "semantic_intents.yml"
     write_text(
         config_path,
         """
 audio:
   min_rms: 175.0
+semantic_classifier:
+  enabled: true
+  fuzzy_enabled: true
+  semantic_enabled: false
+  fuzzy_threshold: 0.78
+  semantic_threshold: 0.72
+  min_confidence: 0.70
+  intents_path: "semantic_intents.yml"
 ivr:
   listen_seconds: 5
   sample_rate: 8000
@@ -31,6 +40,19 @@ ivr:
   vad_enabled: true
   min_speech_ms: 250
   silence_after_speech_ms: 700
+  listen:
+    first_attempt:
+      initial_timeout_seconds: 5.5
+      max_listen_seconds: 6
+      silence_after_speech_ms: 900
+      min_speech_ms: 300
+      early_detection_min_audio_ms: 300
+    retry_attempt:
+      initial_timeout_seconds: 4.5
+      max_listen_seconds: 5
+      silence_after_speech_ms: 700
+      min_speech_ms: 250
+      early_detection_min_audio_ms: 250
   rms_speech_threshold: 250.0
   max_dtmf_wait_ms: 3000
   dtmf_map:
@@ -82,6 +104,14 @@ prompts:
 "SILENCIO": []
 """.strip(),
     )
+    write_text(
+        semantic_intents_path,
+        """
+"SI":
+  canonical: ["quiero hablar con un asesor"]
+  aliases: ["comunicame"]
+""".strip(),
+    )
 
     config = load_app_config(config_path, intents_path)
 
@@ -94,6 +124,11 @@ prompts:
     assert config.ivr.vad_enabled is True
     assert config.ivr.min_speech_ms == 250
     assert config.ivr.silence_after_speech_ms == 700
+    assert config.ivr.listen_profiles.first_attempt.initial_timeout_seconds == 5.5
+    assert config.ivr.listen_profiles.first_attempt.max_listen_seconds == 6
+    assert config.ivr.listen_profiles.first_attempt.silence_after_speech_ms == 900
+    assert config.ivr.listen_profiles.first_attempt.min_speech_ms == 300
+    assert config.ivr.listen_profiles.retry_attempt.initial_timeout_seconds == 4.5
     assert config.ivr.rms_speech_threshold == 250.0
     assert config.vosk.sample_rate == 8000
     assert config.vosk.websocket_url == "ws://127.0.0.1:2700"
@@ -115,6 +150,9 @@ prompts:
     assert config.prompts.tts_provider == "espeak-ng"
     assert config.prompts.tts_voice == "es-la"
     assert config.prompts.cache_enabled is True
+    assert config.semantic_classifier.enabled is True
+    assert config.semantic_classifier.fuzzy_threshold == 0.78
+    assert config.semantic_intents["SI"]["aliases"] == ["comunicame"]
 
 
 def test_load_app_config_supports_legacy_yaml_keys(tmp_path: Path) -> None:
@@ -177,6 +215,8 @@ logging:
     assert config.vosk.sample_rate == 8000
     assert config.ivr.early_detection_enabled is True
     assert config.ivr.vad_enabled is True
+    assert config.ivr.listen_profiles.first_attempt.max_listen_seconds == 4
+    assert config.ivr.listen_profiles.retry_attempt.max_listen_seconds == 4
     assert config.logging.mask_phone_numbers is True
     assert config.logging.events_path == DEFAULT_EVENTS_PATH
     assert config.logging.debug_audio_dump_enabled is True
@@ -242,6 +282,9 @@ logging:
     assert config.ivr.vad_enabled is True
     assert config.ivr.min_speech_ms == 250
     assert config.ivr.silence_after_speech_ms == 700
+    assert config.ivr.listen_profiles.first_attempt.max_listen_seconds == 5
+    assert config.ivr.listen_profiles.retry_attempt.max_listen_seconds == 5
+    assert config.ivr.listen_profiles.first_attempt.initial_timeout_seconds == 5.0
     assert config.ivr.rms_speech_threshold == 250.0
     assert config.logging.mask_phone_numbers is True
     assert config.logging.events_path == DEFAULT_EVENTS_PATH

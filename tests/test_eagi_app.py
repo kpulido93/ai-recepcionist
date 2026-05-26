@@ -12,10 +12,13 @@ from vicidial_vosk_cobranza_ivr.config import (
     AsteriskSettings,
     AudioSettings,
     IvrSettings,
+    ListenAttemptSettings,
+    ListenProfilesSettings,
     LoggingSettings,
     PromptsSettings,
     VoskSettings,
 )
+from vicidial_vosk_cobranza_ivr.decision_engine import DecisionEngine
 from vicidial_vosk_cobranza_ivr.intent_classifier import IntentClassifier
 from vicidial_vosk_cobranza_ivr.service import CobranzaIvrService
 from vicidial_vosk_cobranza_ivr.vosk_client import (
@@ -32,11 +35,14 @@ class FakeSession:
         self,
         environment: dict[str, str],
         set_variable_response: str = "200 result=1",
+        channel_variables: dict[str, str] | None = None,
     ) -> None:
         self.environment = environment
         self.set_variable_response = set_variable_response
+        self.channel_variables = channel_variables or {}
         self.variables: dict[str, str] = {}
         self.verbose_messages: list[tuple[str, int]] = []
+        self.commands: list[str] = []
 
     def read_environment(self) -> dict[str, str]:
         return self.environment
@@ -47,6 +53,15 @@ class FakeSession:
 
     def verbose(self, message: str, level: int = 1) -> None:
         self.verbose_messages.append((message, level))
+
+    def command(self, command_line: str) -> str:
+        self.commands.append(command_line)
+        if not command_line.startswith("GET VARIABLE "):
+            return "200 result=0"
+        variable_name = command_line.removeprefix("GET VARIABLE ").strip()
+        if variable_name not in self.channel_variables:
+            return "200 result=0"
+        return f"200 result=1 ({self.channel_variables[variable_name]})"
 
 
 class StubVoskClient(VoskClient):
@@ -86,6 +101,22 @@ def build_config() -> AppConfig:
             rms_speech_threshold=250.0,
             max_dtmf_wait_ms=5000,
             dtmf_map={"1": "SI", "2": "NO"},
+            listen_profiles=ListenProfilesSettings(
+                first_attempt=ListenAttemptSettings(
+                    initial_timeout_seconds=4.0,
+                    max_listen_seconds=4,
+                    silence_after_speech_ms=700,
+                    min_speech_ms=250,
+                    early_detection_min_audio_ms=250,
+                ),
+                retry_attempt=ListenAttemptSettings(
+                    initial_timeout_seconds=3.0,
+                    max_listen_seconds=3,
+                    silence_after_speech_ms=650,
+                    min_speech_ms=250,
+                    early_detection_min_audio_ms=250,
+                ),
+            ),
         ),
         asterisk=AsteriskSettings(
             app_name="vicidial-vosk-cobranza-ivr",
@@ -154,12 +185,49 @@ def build_service(vosk_client: VoskClient) -> CobranzaIvrService:
         default_intent=config.ivr.default_intent,
         dtmf_map=config.ivr.dtmf_map,
     )
+    decision_engine = DecisionEngine.from_mapping(
+        {
+            "SI": {
+                "transfer_eligible": True,
+                "decision": "TRANSFER",
+                "final_disposition": "VOZ_SI_ABOGADO",
+                "priority": 10,
+                "retry_allowed": False,
+                "hard_block": False,
+            },
+            "NO": {
+                "transfer_eligible": False,
+                "decision": "NO_TRANSFER",
+                "final_disposition": "VOZ_NO_FINALIZA",
+                "priority": 20,
+                "retry_allowed": False,
+                "hard_block": True,
+            },
+            "DUDA": {
+                "transfer_eligible": False,
+                "decision": "RETRY",
+                "final_disposition": "VOZ_DUDA",
+                "priority": 5,
+                "retry_allowed": True,
+                "hard_block": False,
+            },
+            "SILENCIO": {
+                "transfer_eligible": False,
+                "decision": "RETRY",
+                "final_disposition": "VOZ_SILENCIO",
+                "priority": 1,
+                "retry_allowed": True,
+                "hard_block": False,
+            },
+        }
+    )
     logger = logging.getLogger("test_eagi_app.service")
     logger.handlers.clear()
     logger.addHandler(logging.NullHandler())
     return CobranzaIvrService(
         config=config,
         classifier=classifier,
+        decision_engine=decision_engine,
         vosk_client=vosk_client,
         logger=logger,
     )
@@ -201,6 +269,11 @@ def test_run_eagi_session_prefers_dtmf_over_vosk() -> None:
     assert session.variables["VOSK_TEXT"] == ""
     assert session.variables["VOSK_CONFIDENCE"] == "1.00"
     assert session.variables["VOSK_SOURCE"] == "dtmf"
+    assert session.variables["VOSK_DECISION"] == "TRANSFER"
+    assert session.variables["VOSK_TRANSFER_ELIGIBLE"] == "1"
+    assert session.variables["VOSK_BLOCK_REASON"] == ""
+    assert session.variables["VOSK_FINAL_DISPOSITION"] == "VOZ_SI_ABOGADO"
+    assert session.variables["VOSK_MATCHED_VALUE"] == "1"
 
 
 def test_run_eagi_session_falls_back_to_voice_when_dtmf_is_invalid() -> None:
@@ -239,7 +312,9 @@ def test_run_eagi_session_falls_back_to_voice_when_dtmf_is_invalid() -> None:
     assert result == 0
     assert vosk_client.calls == 1
     assert session.variables["VOSK_INTENT"] == "SI"
-    assert session.variables["VOSK_SOURCE"] == "speech"
+    assert session.variables["VOSK_SOURCE"] == "transcript"
+    assert session.variables["VOSK_DECISION"] == "TRANSFER"
+    assert session.variables["VOSK_TRANSFER_ELIGIBLE"] == "1"
 
 
 def test_run_eagi_session_marks_silence_when_audio_is_empty() -> None:
@@ -266,6 +341,9 @@ def test_run_eagi_session_marks_silence_when_audio_is_empty() -> None:
     assert session.variables["VOSK_TEXT"] == ""
     assert session.variables["VOSK_CONFIDENCE"] == "0.00"
     assert session.variables["VOSK_SOURCE"] == "silence"
+    assert session.variables["VOSK_DECISION"] == "RETRY"
+    assert session.variables["VOSK_TRANSFER_ELIGIBLE"] == "0"
+    assert session.variables["VOSK_FINAL_DISPOSITION"] == "VOZ_SILENCIO"
 
 
 def test_run_eagi_session_marks_silence_when_rms_is_below_threshold() -> None:
@@ -290,6 +368,7 @@ def test_run_eagi_session_marks_silence_when_rms_is_below_threshold() -> None:
     assert vosk_client.calls == 0
     assert session.variables["VOSK_INTENT"] == "SILENCIO"
     assert session.variables["VOSK_SOURCE"] == "silence"
+    assert session.variables["VOSK_DECISION"] == "RETRY"
 
 
 def test_run_eagi_session_marks_error_when_vosk_times_out() -> None:
@@ -323,6 +402,10 @@ def test_run_eagi_session_marks_error_when_vosk_times_out() -> None:
     assert session.variables["VOSK_TEXT"] == ""
     assert session.variables["VOSK_CONFIDENCE"] == "0.00"
     assert session.variables["VOSK_SOURCE"] == "error"
+    assert session.variables["VOSK_DECISION"] == "RETRY"
+    assert session.variables["VOSK_TRANSFER_ELIGIBLE"] == "0"
+    assert session.variables["VOSK_BLOCK_REASON"] == "error"
+    assert session.variables["VOSK_FINAL_DISPOSITION"] == "VOZ_ERROR_CLASIFICACION"
 
 
 def test_run_eagi_session_marks_error_when_vosk_fails() -> None:
@@ -347,6 +430,8 @@ def test_run_eagi_session_marks_error_when_vosk_fails() -> None:
     assert session.variables["VOSK_TEXT"] == ""
     assert session.variables["VOSK_CONFIDENCE"] == "0.00"
     assert session.variables["VOSK_SOURCE"] == "error"
+    assert session.variables["VOSK_DECISION"] == "RETRY"
+    assert session.variables["VOSK_BLOCK_REASON"] == "error"
 
 
 def test_run_eagi_session_marks_error_when_vosk_protocol_is_invalid() -> None:
@@ -371,6 +456,8 @@ def test_run_eagi_session_marks_error_when_vosk_protocol_is_invalid() -> None:
     assert session.variables["VOSK_TEXT"] == ""
     assert session.variables["VOSK_CONFIDENCE"] == "0.00"
     assert session.variables["VOSK_SOURCE"] == "error"
+    assert session.variables["VOSK_DECISION"] == "RETRY"
+    assert session.variables["VOSK_BLOCK_REASON"] == "error"
 
 
 def test_run_eagi_session_classifies_speech_and_sets_confidence() -> None:
@@ -400,7 +487,10 @@ def test_run_eagi_session_classifies_speech_and_sets_confidence() -> None:
     assert session.variables["VOSK_INTENT"] == "SI"
     assert session.variables["VOSK_TEXT"] == "si quiero hablar"
     assert session.variables["VOSK_CONFIDENCE"] == "0.86"
-    assert session.variables["VOSK_SOURCE"] == "speech"
+    assert session.variables["VOSK_SOURCE"] == "transcript"
+    assert session.variables["VOSK_DECISION"] == "TRANSFER"
+    assert session.variables["VOSK_TRANSFER_ELIGIBLE"] == "1"
+    assert session.variables["VOSK_MATCHED_VALUE"] == "quiero hablar"
 
 
 def test_run_eagi_session_logs_vad_metrics_and_prefers_early_intent_stop_reason() -> None:
@@ -451,6 +541,42 @@ def test_run_eagi_session_logs_vad_metrics_and_prefers_early_intent_stop_reason(
     assert "rms_avg=12000.00" in logged
     assert "rms_max=32767.00" in logged
     assert "stop_reason=early_intent" in logged
+    assert "try=0" in logged
+    assert "transcript=si" in logged
+    assert "early_partial=si" in logged
+
+
+def test_run_eagi_session_uses_retry_profile_from_channel_variable() -> None:
+    session = FakeSession(
+        {"agi_channel": "SIP/test-retry", "agi_callerid": "123456"},
+        channel_variables={"VOSK_TRY": "1"},
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(transcript="si", raw_messages=[{"text": "si"}], confidence=0.95)
+    )
+    service = build_service(vosk_client)
+    config = build_config()
+    retry_profile = config.ivr.listen_profiles.retry_attempt
+    logger = build_logger("test_eagi_app.retry_profile")
+    observed_listen_seconds: list[int] = []
+
+    def capture_audio(fd: int, listen_seconds: int, sample_rate: int) -> bytes:
+        del fd, sample_rate
+        observed_listen_seconds.append(listen_seconds)
+        return b"\xff\x7f" * 400
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=capture_audio,
+        environment=session.environment,
+    )
+
+    assert result == 0
+    assert observed_listen_seconds == [retry_profile.max_listen_seconds]
+    assert "GET VARIABLE VOSK_TRY" in session.commands
 
 
 def test_log_result_omits_transcript_when_log_transcript_is_disabled() -> None:
@@ -469,7 +595,7 @@ def test_log_result_omits_transcript_when_log_transcript_is_disabled() -> None:
         logger=logger,
         config=config,
         intent="SI",
-        source="speech",
+        source="transcript",
         confidence=0.91,
         transcript="si quiero hablar con el abogado",
         matched_phrase="quiero hablar",
@@ -483,7 +609,7 @@ def test_log_result_omits_transcript_when_log_transcript_is_disabled() -> None:
 
     assert "si quiero hablar con el abogado" not in logged
     assert "transcript=" not in logged
-    assert session.verbose_messages == [("VOSK intent=SI source=speech confidence=0.91", 1)]
+    assert session.verbose_messages == [("VOSK intent=SI source=transcript confidence=0.91", 1)]
 
 
 def test_log_result_masks_transcript_and_logs_fin_eagi_when_enabled() -> None:
@@ -521,7 +647,7 @@ def test_log_result_masks_transcript_and_logs_fin_eagi_when_enabled() -> None:
         logger=logger,
         config=config,
         intent="CALLBACK",
-        source="speech",
+        source="transcript",
         confidence=0.80,
         transcript="llameme al 3001234567",
         matched_phrase="llameme al 3001234567",
@@ -539,7 +665,11 @@ def test_log_result_masks_transcript_and_logs_fin_eagi_when_enabled() -> None:
     assert "matched_phrase=llameme al XXXXXXXX67" in logged
     assert "stop_reason=timeout" in logged
     assert session.verbose_messages == [
-        ("VOSK intent=CALLBACK source=speech confidence=0.80 transcript=llameme al XXXXXXXX67", 1)
+        (
+            "VOSK intent=CALLBACK source=transcript confidence=0.80 "
+            "transcript=llameme al XXXXXXXX67",
+            1,
+        )
     ]
 
 
@@ -743,6 +873,6 @@ def test_run_eagi_session_writes_structured_jsonl_event(tmp_path: Path) -> None:
     assert written_event["state"] == "TRANSFERIR_A_ABOGADO"
     assert written_event["attempts"] == 2
     assert written_event["stop_reason"] == "eof"
-    assert written_event["source"] == "speech"
+    assert written_event["source"] == "transcript"
     assert written_event["caller"] == "XXXXXXXX67"
     assert "3001234567" not in written_event["channel"]

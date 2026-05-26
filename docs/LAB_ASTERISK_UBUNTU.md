@@ -4,21 +4,44 @@ Guia oficial para montar el laboratorio local del proyecto sin asumir VICIdial i
 
 Este laboratorio sirve para validar el flujo EAGI + Vosk en una PBX Asterisk local usando dos softphones SIP (`1001` y `1002`) y una extension de prueba (`9900`). No reemplaza la configuracion productiva ni la integracion final con VICIdial.
 
+## Estado estable actual
+
+Referencia operativa del ultimo despliegue estable validado en el servidor local:
+
+- Fecha y hora: `2026-05-25 22:31 AST`
+- Ruta activa: `/opt/vicidial-vosk-cobranza-ivr`
+- Extension de prueba funcionando correctamente: `9910`
+- La transferencia del contexto de prueba ya depende de `VOSK_TRANSFER_ELIGIBLE=1` o `VOSK_DECISION=TRANSFER`
+- Frases probadas que transfieren: `comunicame`, `quiero pagar`, `cuanto debo`
+- Frases probadas que no transfieren: `no`, `numero equivocado`, `no soy esa persona`
+- Backup mas reciente usado: `/root/backup-vosk-deploy-20260525-223126`
+- Ruta estable activa en servidor: Asterisk actual + Vosk nativo + motor de decision
+
+Comandos utiles de monitoreo:
+
+```bash
+asterisk -rvvvvv
+agi set debug on
+agi set debug off
+tail -f /var/log/asterisk/vosk_cobranza.log
+```
+
 ## 1. Arquitectura
 
 Flujo base del laboratorio:
 
 ```text
-Softphone 1001 -> Asterisk -> EAGI -> Vosk Docker -> intent -> 1002
+Softphone 1001 -> Asterisk -> lead context -> saludo personalizado -> EAGI -> Vosk Docker -> intent -> cartera/1002 fallback
 ```
 
 Descripcion operativa:
 
 1. El usuario registrado como `1001` llama a la extension `9900`.
-2. Asterisk puede ejecutar `AGI(generate_personalized_prompt.py)` para construir un saludo local por lead y luego ejecuta `EAGI(vosk_cobranza.py)`.
-3. El AGI envia audio a Vosk Server por WebSocket.
-4. El texto reconocido se clasifica como `SI`, `NO`, `DUDA`, `SILENCIO` o intents de cobranza como `INFO_COBRO`, `PROMESA_PAGO`, `CALLBACK`, `NUMERO_EQUIVOCADO` y `NO_ES_PERSONA`.
-5. Segun la intencion, Asterisk transfiere hacia `1002`, reintenta una vez o finaliza/documenta el resultado en el laboratorio.
+2. Asterisk carga contexto de lead con `AGI(load_lead_context.py)`.
+3. Asterisk puede generar audio de nombre con `AGI(generate_name_audio.py)` y luego resuelve el saludo con `AGI(generate_personalized_prompt.py)`.
+4. `EAGI(vosk_cobranza.py)` envia audio a Vosk Server por WebSocket.
+5. El texto reconocido se clasifica y el motor devuelve `VOSK_INTENT`, `VOSK_DECISION` y `VOSK_TRANSFER_ELIGIBLE`.
+6. Segun la decision y el intent, Asterisk resuelve el destino por cartera con `AGI(resolve_transfer_target.py)`, transfiere con fallback a `1002`, reintenta una vez o finaliza/documenta el resultado en el laboratorio.
 
 ## 2. Dependencias Ubuntu
 
@@ -181,6 +204,13 @@ Rutas comunes de `agi-bin`:
 
 Confirma cual usa tu instalacion y crea el wrapper en esa carpeta.
 
+El sample de laboratorio usa estos AGIs:
+
+- `vosk_cobranza.py`
+- `load_lead_context.py`
+- `generate_personalized_prompt.py`
+- `resolve_transfer_target.py`
+
 Ejemplo de wrapper:
 
 ```bash
@@ -202,6 +232,8 @@ sudo chown root:asterisk /var/lib/asterisk/agi-bin/vosk_cobranza.py
 
 Si tu distro usa `/usr/share/asterisk/agi-bin`, cambia solo la ruta de destino del wrapper.
 
+Para `load_lead_context.py`, `generate_personalized_prompt.py` y `resolve_transfer_target.py` puedes repetir el mismo patron o usar symlinks hacia los scripts del repo si ya instalaste el proyecto localmente.
+
 Tambien puedes apoyarte en [scripts/install_agi.sh](/D:/repos/ai-recepcionista/scripts/install_agi.sh) como base de despliegue local, pero el wrapper anterior deja explicito que Asterisk debe usar la `.venv` del laboratorio.
 
 Si usas el sample del laboratorio con saludo personalizado, crea tambien un wrapper gemelo para `generate_personalized_prompt.py` en el mismo `agi-bin`, apuntando a `${PROJECT_DIR}/agi/generate_personalized_prompt.py`.
@@ -218,58 +250,122 @@ Objetivo minimo del laboratorio:
 Samples incluidos en el repo:
 
 - [asterisk/pjsip_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/pjsip_lab.conf.sample): endpoints PJSIP locales `1001` y `1002`, transporte UDP en `0.0.0.0:5060` y placeholders seguros.
-- [asterisk/extensions_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_lab.conf.sample): dialplan voice-first del laboratorio con `9900 -> ivr-cobranza-vosk -> PJSIP/1002`, saludo personalizado opcional por AGI con fallback a `custom/mensaje-cobranza`, un solo reintento para `DUDA`/`SILENCIO` y rutas documentadas para `CALLBACK`, `NUMERO_EQUIVOCADO` y `NO_ES_PERSONA`.
+- [asterisk/extensions_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_lab.conf.sample): dialplan del laboratorio con `load_lead_context.py`, `generate_name_audio.py`, `generate_personalized_prompt.py`, `vosk_cobranza.py` y `resolve_transfer_target.py`, prioridad para `VOSK_TRANSFER_ELIGIBLE` y `VOSK_DECISION`, fallback a `PJSIP/1002`, un solo reintento para `DUDA`/`SILENCIO` y compatibilidad por `VOSK_INTENT`.
 - [asterisk/extensions_custom.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_custom.conf.sample): sample mas cercano al flujo futuro de integracion con VICIdial.
 
 Para el laboratorio local, carga primero `pjsip_lab.conf.sample` y `extensions_lab.conf.sample`. El sample `extensions_custom.conf.sample` queda como referencia para escenarios mas cercanos a produccion o a una integracion posterior con VICIdial.
 
+### 9.1 Flujo del sample
+
+Orden de ejecucion del sample `extensions_lab.conf.sample`:
+
+1. `Answer()` y `Set(TRY=0)`.
+2. Variables comentadas de laboratorio para `lead_id`, telefono, cliente, banco y cartera.
+3. `AGI(load_lead_context.py)`.
+4. `AGI(generate_name_audio.py)`.
+5. `AGI(generate_personalized_prompt.py)`.
+6. Reproduccion segmentada opcional `custom/hola -> IVR_NAME_AUDIO -> IVR_BANK_GREETING_AUDIO`; si no aplica, `Playback(${IVR_GREETING_AUDIO})` con fallback a `custom/mensaje-cobranza`.
+7. `EAGI(vosk_cobranza.py)`.
+8. Ruteo priorizando `VOSK_TRANSFER_ELIGIBLE` y `VOSK_DECISION`, con fallback por `VOSK_INTENT`.
+9. `AGI(resolve_transfer_target.py)` antes de `Dial(${IVR_TRANSFER_TARGET},20)`.
+
+### 9.2 Como probar con variables hardcodeadas de laboratorio
+
+El sample deja comentadas estas lineas:
+
+```asterisk
+; same => n,Set(IVR_LEAD_ID=lab-001)
+; same => n,Set(IVR_PHONE_NUMBER=${CALLERID(num)})
+; same => n,Set(IVR_CLIENT_NAME=Juan)
+; same => n,Set(IVR_BANK_NAME=Banco Popular)
+; same => n,Set(IVR_PORTFOLIO_ID=popular_mora_30)
+```
+
+Prueba recomendada:
+
+1. Descomenta `IVR_LEAD_ID` y `IVR_PHONE_NUMBER`.
+2. Deja activo `AGI(load_lead_context.py)`.
+3. Crea una fila matching en `config/lead_context.sample.csv` para que el AGI complete `IVR_CLIENT_NAME`, `IVR_BANK_NAME` e `IVR_PORTFOLIO_ID`.
+4. Llama desde `1001` a `9900` y revisa el log de Asterisk para confirmar que el saludo y el ruteo usan esos datos.
+
+Prueba rapida sin CSV:
+
+1. Descomenta tambien `IVR_CLIENT_NAME`, `IVR_BANK_NAME` e `IVR_PORTFOLIO_ID`.
+2. Comenta temporalmente `AGI(load_lead_context.py)` en el sample.
+3. Recarga el dialplan y llama a `9900`.
+4. Esa variante solo sirve para smoke test local; la prueba principal debe dejar `load_lead_context.py` activo.
+
+### 9.3 Como preparar `config/lead_context.sample.csv`
+
+El AGI `load_lead_context.py` espera un CSV con estas columnas:
+
+```text
+lead_id,phone_number,client_name,bank_name,portfolio_id,campaign_id,list_id
+```
+
+Ejemplo seguro para laboratorio:
+
+```text
+lead_id,phone_number,client_name,bank_name,portfolio_id,campaign_id,list_id
+lab-001,8095550101,Juan,Banco Popular,popular_mora_30,CAMP_LAB,LIST_LAB
+lab-002,8095550102,Ana,Banco BHD,bhd_mora_60,CAMP_LAB,LIST_LAB
+```
+
+Notas utiles:
+
+- Si en el dialplan usas `Set(IVR_PHONE_NUMBER=${CALLERID(num)})`, el valor del caller ID debe coincidir con `phone_number`.
+- Si prefieres buscar solo por `lead_id`, usa un `IVR_LEAD_ID` unico por prueba y mantelo consistente con el CSV.
+- Puedes sobrescribir la ruta del CSV con `IVR_LEAD_CONTEXT_CSV`, pero en el laboratorio basta con editar `config/lead_context.sample.csv`.
+
+### 9.4 Como configurar `routing.yml`
+
+El AGI `resolve_transfer_target.py` usa `config/routing.yml` para decidir el destino final. Ejemplo:
+
+```yaml
+default_transfer_target: "PJSIP/1002"
+allowed_target_patterns:
+  - "^PJSIP/[A-Za-z0-9_-]+$"
+  - "^Local/[A-Za-z0-9_-]+@[A-Za-z0-9_-]+$"
+
+portfolios:
+  popular_mora_30:
+    bank_names:
+      - "Banco Popular"
+      - "Popular"
+    transfer_target: "PJSIP/1002"
+
+  bhd_mora_60:
+    bank_names:
+      - "Banco BHD"
+      - "BHD"
+    transfer_target: "PJSIP/1003"
+```
+
+Reglas practicas del laboratorio:
+
+- `portfolio_id` tiene prioridad sobre `bank_name`.
+- Si no hay match, el AGI usa `default_transfer_target`.
+- Si el target no coincide con los patrones permitidos, cae al default seguro.
+- Para validar el flujo completo, haz que el `portfolio_id` del CSV coincida con una clave de `portfolios`.
+
 Nota sobre intents:
 
 - `INFO_COBRO` indica interes en conocer el detalle del cobro o de la deuda.
-- `PROMESA_PAGO` indica disposicion a pagar o resolver y en laboratorio tambien se transfiere a `1002`.
-- En el laboratorio, `extensions_lab.conf.sample` transfiere `SI`, `INFO_COBRO` y `PROMESA_PAGO` igual que `SI` hacia `1002`.
-- Si `IVR_LEAD_ID` viene vacio, el sample deriva `lab-${UNIQUEID}` para el cache local del saludo.
-- El sample llama `AGI(generate_personalized_prompt.py)` y luego hace `Playback(${IVR_GREETING_AUDIO})`.
+- `PROMESA_PAGO` indica disposicion a pagar o resolver y en laboratorio tambien se transfiere segun la cartera resuelta.
+- En el laboratorio, `extensions_lab.conf.sample` transfiere `SI`, `INFO_COBRO` y `PROMESA_PAGO` igual que `SI` hacia `IVR_TRANSFER_TARGET`, con fallback a `1002`.
+- El sample prioriza `VOSK_TRANSFER_ELIGIBLE=1` o `VOSK_DECISION=TRANSFER` y conserva fallback por `VOSK_INTENT`.
 - Si `IVR_GREETING_AUDIO` queda vacio, el sample cae a `Playback(custom/mensaje-cobranza)`.
-- El sample registra el resultado del `Dial()` con `Set(TRANSFER_STATUS=${DIALSTATUS})` y lo expone con `NoOp(TRANSFER_STATUS=${TRANSFER_STATUS})`.
 - `CALLBACK`, `NUMERO_EQUIVOCADO` y `NO_ES_PERSONA` no transfieren por defecto en el sample; quedan en extensiones documentadas para que luego puedas mapear dispositions reales sin tocar el contrato de `VOSK_INTENT`.
 - En produccion puedes rutear `INFO_COBRO` a otro agente, skill o flujo sin cambiar el contrato base de `VOSK_INTENT`.
-
-Ejemplo rapido para probar el saludo personalizado en laboratorio:
-
-```asterisk
-same => n,Set(IVR_CLIENT_NAME=Kevin)
-same => n,Set(IVR_BANK_NAME=Banco Popular)
-same => n,AGI(generate_personalized_prompt.py)
-same => n,Set(IVR_GREETING_AUDIO=${IF($["${IVR_GREETING_AUDIO}"=""]?custom/mensaje-cobranza:${IVR_GREETING_AUDIO})})
-same => n,Playback(${IVR_GREETING_AUDIO})
-```
-
-Con ese ejemplo, si la generacion local funciona, el caller oye un saludo parecido a `Hola Kevin, nos comunicamos de SokaCorp por una gestion pendiente relacionada con Banco Popular. ¿Desea que le comuniquemos ahora? Le escucho.` Si falla, el laboratorio sigue con el audio generico `custom/mensaje-cobranza`.
-
-Cuando usas ese saludo completo generado, el sample ya no necesita reproducir `custom/pregunta-abogado` aparte. Conserva ese audio solo si quieres volver a un flujo estatico de dos prompts.
-
-Lectura recomendada de `TRANSFER_STATUS` en laboratorio:
-
-- `ANSWER`: el agente o abogado contesto la transferencia.
-- `NOANSWER`: el agente no contesto dentro del timeout.
-- `BUSY`: el destino estaba ocupado.
-- `CANCEL`: el llamante colgo antes de completar la transferencia.
-- `CHANUNAVAIL`: el agente o canal no estaba disponible.
-
-Prompt recomendado para `custom/pregunta-abogado`:
-
-- `¿Lo transfiero ahora? Le escucho.`
-
 Nota operativa:
 
-- Si tu canal, version de Asterisk o softphone no permite barge-in real durante `Playback()`, el caller debe responder justo al terminar el prompt.
+- El saludo personalizado generado desde `config/ivr.yml` ya puede incluir la pregunta de transferencia, por eso el sample no reproduce `custom/pregunta-abogado`.
+- Si tu canal, version de Asterisk o softphone no permite barge-in real durante `Playback()`, el caller debe responder justo al terminar el saludo.
 - El sample no reproduce un audio adicional tipo "lo comunico" antes del `Dial()` para reducir latencia y evitar sensacion robotica.
 
 Audios sugeridos en `/var/lib/asterisk/sounds/custom/`:
 
 - `mensaje-cobranza.wav`
-- `pregunta-abogado.wav`
 - `no-entendi.wav`
 - `mensaje-final.wav`
 
@@ -306,7 +402,7 @@ Recomendaciones:
 
 - Desactiva video para simplificar la prueba.
 - Deja `PCMU/PCMA` arriba en la prioridad de codecs.
-- Llama desde `1001` a `9900` y verifica que `1002` reciba la transferencia del flujo de laboratorio cuando corresponda.
+- Llama desde `1001` a `9900` y verifica que el saludo use el cliente/banco esperado y que el destino configurado por cartera reciba la transferencia; si no hay match, debe caer en `1002`.
 
 ## 11. Troubleshooting
 

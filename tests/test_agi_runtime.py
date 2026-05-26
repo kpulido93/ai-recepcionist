@@ -103,7 +103,12 @@ def test_write_agi_result_sets_all_vosk_variables() -> None:
         intent="SI",
         text="si quiero hablar",
         confidence="0.91",
-        source="speech",
+        source="transcript",
+        decision="TRANSFER",
+        transfer_eligible="1",
+        block_reason="",
+        final_disposition="VOZ_SI_ABOGADO",
+        matched_value="si",
     )
 
     assert result is True
@@ -111,7 +116,12 @@ def test_write_agi_result_sets_all_vosk_variables() -> None:
         ("VOSK_TEXT", "si quiero hablar"),
         ("VOSK_INTENT", "SI"),
         ("VOSK_CONFIDENCE", "0.91"),
-        ("VOSK_SOURCE", "speech"),
+        ("VOSK_SOURCE", "transcript"),
+        ("VOSK_DECISION", "TRANSFER"),
+        ("VOSK_TRANSFER_ELIGIBLE", "1"),
+        ("VOSK_BLOCK_REASON", ""),
+        ("VOSK_FINAL_DISPOSITION", "VOZ_SI_ABOGADO"),
+        ("VOSK_MATCHED_VALUE", "si"),
     ]
 
 

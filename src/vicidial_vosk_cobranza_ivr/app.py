@@ -13,14 +13,16 @@ from vicidial_vosk_cobranza_ivr.audio import (
     calculate_rms,
     capture_eagi_audio_result,
 )
+from vicidial_vosk_cobranza_ivr.blocklist import BlocklistMatcher
 from vicidial_vosk_cobranza_ivr.config import (
     AppConfig,
+    ListenAttemptSettings,
     load_app_config,
     resolve_runtime_paths,
 )
+from vicidial_vosk_cobranza_ivr.decision_engine import DecisionEngine
 from vicidial_vosk_cobranza_ivr.intent_classifier import (
     IntentClassifier,
-    detect_early_intent,
     intent_value,
 )
 from vicidial_vosk_cobranza_ivr.logging_utils import (
@@ -46,11 +48,23 @@ def build_service(
     logger: logging.Logger,
     audio_sender: Callable[[object, bytes], None] | None = None,
 ) -> CobranzaIvrService:
+    blocklist_matcher = BlocklistMatcher.from_paths()
     classifier = IntentClassifier(
         phrases=config.intents,
         default_intent=config.ivr.default_intent,
         dtmf_map=config.ivr.dtmf_map,
+        semantic_config={
+            "enabled": config.semantic_classifier.enabled,
+            "fuzzy_enabled": config.semantic_classifier.fuzzy_enabled,
+            "semantic_enabled": config.semantic_classifier.semantic_enabled,
+            "fuzzy_threshold": config.semantic_classifier.fuzzy_threshold,
+            "semantic_threshold": config.semantic_classifier.semantic_threshold,
+            "min_confidence": config.semantic_classifier.min_confidence,
+        },
+        semantic_intents=config.semantic_intents,
+        blocklist_matcher=blocklist_matcher,
     )
+    decision_engine = DecisionEngine.from_yaml()
     vosk_client = VoskClient(
         websocket_url=config.vosk.websocket_url,
         timeout_seconds=config.vosk.websocket_timeout_seconds,
@@ -58,15 +72,12 @@ def build_service(
         early_detection_enabled=config.ivr.early_detection_enabled,
         early_detection_min_audio_ms=config.ivr.early_detection_min_audio_ms,
         early_detection_min_chars=config.ivr.early_detection_min_chars,
-        early_intent_detector=lambda partial: detect_early_intent(
-            partial,
-            intents_config=config.intents,
-            supported_intents=config.intents.keys(),
-        ),
+        early_intent_detector=classifier.detect_early_intent,
     )
     return CobranzaIvrService(
         config=config,
         classifier=classifier,
+        decision_engine=decision_engine,
         vosk_client=vosk_client,
         logger=logger,
     )
@@ -127,11 +138,13 @@ def run_eagi_session(
     attempts = _resolve_attempts(call_environment)
     masked_channel = _mask_log_value(channel, config.logging.mask_phone_numbers)
     masked_caller = _mask_log_value(caller, config.logging.mask_phone_numbers)
+    retry_count = _resolve_retry_count(session, call_environment, logger)
     logger.info(
-        "Inicio EAGI uniqueid=%s channel=%s caller=%s",
+        "Inicio EAGI uniqueid=%s channel=%s caller=%s try=%s",
         uniqueid,
         masked_channel,
         masked_caller,
+        retry_count,
     )
 
     try:
@@ -140,12 +153,18 @@ def run_eagi_session(
         finish_reason = "error"
         capture_result: CaptureResult | None = None
         if dtmf and dtmf in config.ivr.dtmf_map:
-            outcome = service.classify_audio_bytes(b"", config.ivr.sample_rate, dtmf=dtmf)
+            outcome = service.classify_audio_bytes(
+                b"",
+                config.ivr.sample_rate,
+                dtmf=dtmf,
+                retry_count=retry_count,
+            )
             capture_finish_reason = "dtmf"
         else:
             capture_result = _capture_audio_result(
                 capture_audio=capture_audio,
                 config=config,
+                retry_count=retry_count,
             )
             logger.debug(
                 (
@@ -170,12 +189,22 @@ def run_eagi_session(
             outcome = service.classify_audio_bytes(
                 audio_bytes=capture_result.audio_bytes,
                 sample_rate=config.ivr.sample_rate,
+                retry_count=retry_count,
             )
             capture_finish_reason = capture_result.finish_reason
 
         transcript = sanitize_channel_value(outcome.transcript)
         finish_reason = _resolve_finish_reason(capture_finish_reason, outcome.finish_reason)
         _log_vosk_debug(logger=logger, config=config, raw_messages=outcome.raw_messages)
+        _log_listen_diagnostics(
+            logger=logger,
+            config=config,
+            retry_count=retry_count,
+            capture_result=capture_result,
+            finish_reason=finish_reason,
+            transcript=transcript,
+            raw_messages=outcome.raw_messages,
+        )
         write_ok = _write_agi_result(
             session=session,
             channel_variable_name=config.asterisk.channel_variable_name,
@@ -183,6 +212,11 @@ def run_eagi_session(
             text=transcript,
             confidence=f"{outcome.confidence:.2f}",
             source=outcome.source,
+            decision=outcome.decision,
+            transfer_eligible="1" if outcome.transfer_eligible else "0",
+            block_reason=outcome.block_reason or "",
+            final_disposition=outcome.final_disposition,
+            matched_value=sanitize_channel_value(outcome.matched_value or ""),
         )
         _log_result(
             session=session,
@@ -282,19 +316,26 @@ def _capture_audio_result(
     *,
     capture_audio: Callable[[int, int, int], bytes | CaptureResult] | None,
     config: AppConfig,
+    retry_count: int,
 ) -> CaptureResult:
+    active_listen_profile = _resolve_listen_attempt_settings(config=config, retry_count=retry_count)
     if capture_audio is None:
         return capture_eagi_audio_result(
             fd=3,
-            listen_seconds=config.ivr.listen_seconds,
+            listen_seconds=active_listen_profile.max_listen_seconds,
             sample_rate=config.ivr.sample_rate,
             vad_enabled=config.ivr.vad_enabled,
-            min_speech_ms=config.ivr.min_speech_ms,
-            silence_after_speech_ms=config.ivr.silence_after_speech_ms,
+            min_speech_ms=active_listen_profile.min_speech_ms,
+            silence_after_speech_ms=active_listen_profile.silence_after_speech_ms,
             rms_speech_threshold=config.ivr.rms_speech_threshold,
+            initial_silence_timeout_ms=int(active_listen_profile.initial_timeout_seconds * 1000),
         )
 
-    captured = capture_audio(3, config.ivr.listen_seconds, config.ivr.sample_rate)
+    captured = capture_audio(
+        3,
+        active_listen_profile.max_listen_seconds,
+        config.ivr.sample_rate,
+    )
     if isinstance(captured, CaptureResult):
         return captured
 
@@ -323,12 +364,22 @@ def _write_agi_result(
     text: str,
     confidence: str,
     source: str,
+    decision: str,
+    transfer_eligible: str,
+    block_reason: str,
+    final_disposition: str,
+    matched_value: str,
 ) -> bool:
     responses = [
         agi_set_variable(session, "VOSK_TEXT", text),
         agi_set_variable(session, "VOSK_INTENT", intent),
         agi_set_variable(session, "VOSK_CONFIDENCE", confidence),
         agi_set_variable(session, "VOSK_SOURCE", source),
+        agi_set_variable(session, "VOSK_DECISION", decision),
+        agi_set_variable(session, "VOSK_TRANSFER_ELIGIBLE", transfer_eligible),
+        agi_set_variable(session, "VOSK_BLOCK_REASON", block_reason),
+        agi_set_variable(session, "VOSK_FINAL_DISPOSITION", final_disposition),
+        agi_set_variable(session, "VOSK_MATCHED_VALUE", matched_value),
     ]
     if channel_variable_name != "VOSK_INTENT":
         responses.append(agi_set_variable(session, channel_variable_name, intent))
@@ -444,6 +495,11 @@ def _safe_write_error_result(
             text="",
             confidence="0.00",
             source="error",
+            decision="RETRY",
+            transfer_eligible="0",
+            block_reason="error",
+            final_disposition="VOZ_ERROR_CLASIFICACION",
+            matched_value="",
         )
     except AgiIoError:
         return
@@ -605,3 +661,115 @@ def _mask_text_for_logging(value: str, mask_phone_numbers: bool) -> str:
 def _safe_filename_fragment(value: str) -> str:
     collapsed = SAFE_FILENAME_PATTERN.sub("_", value.strip())
     return collapsed.strip("_")
+
+
+def _resolve_retry_count(
+    session: AgiSession,
+    environment: dict[str, str],
+    logger: logging.Logger,
+) -> int:
+    retry_count = _parse_retry_count_from_mapping(environment)
+    if retry_count is not None:
+        return retry_count
+
+    for variable_name in ("TRY", "VOSK_TRY", "IVR_RETRY_COUNT"):
+        variable_value = _read_channel_variable(session, variable_name, logger)
+        if variable_value is None:
+            continue
+        try:
+            return max(0, int(variable_value))
+        except ValueError:
+            logger.debug(
+                "Variable de reintento invalida variable=%s value=%s",
+                variable_name,
+                variable_value,
+            )
+
+    return 0
+
+
+def _parse_retry_count_from_mapping(environment: dict[str, str]) -> int | None:
+    for key in ("TRY", "VOSK_TRY", "IVR_RETRY_COUNT", "agi_arg_2"):
+        raw_value = environment.get(key, "").strip()
+        if not raw_value:
+            continue
+        try:
+            return max(0, int(raw_value))
+        except ValueError:
+            continue
+    return None
+
+
+def _read_channel_variable(
+    session: AgiSession,
+    variable_name: str,
+    logger: logging.Logger,
+) -> str | None:
+    try:
+        response = session.command(f"GET VARIABLE {variable_name}")
+    except AgiIoError as exc:
+        logger.debug("No fue posible leer variable de canal %s: %s", variable_name, exc)
+        return None
+
+    return _parse_get_variable_response(response)
+
+
+def _parse_get_variable_response(response: str) -> str | None:
+    if "result=0" in response:
+        return None
+    if "(" not in response or ")" not in response:
+        return None
+    raw_value = response.rsplit("(", 1)[1].rsplit(")", 1)[0].strip()
+    return raw_value or None
+
+
+def _resolve_listen_attempt_settings(
+    *,
+    config: AppConfig,
+    retry_count: int,
+) -> ListenAttemptSettings:
+    if retry_count <= 0:
+        return config.ivr.listen_profiles.first_attempt
+    return config.ivr.listen_profiles.retry_attempt
+
+
+def _log_listen_diagnostics(
+    *,
+    logger: logging.Logger,
+    config: AppConfig,
+    retry_count: int,
+    capture_result: CaptureResult | None,
+    finish_reason: str,
+    transcript: str,
+    raw_messages: tuple[dict[str, object], ...],
+) -> None:
+    had_audio = capture_result is not None and capture_result.bytes_read > 0
+    duration_ms = capture_result.duration_ms if capture_result is not None else 0
+    speech_started = capture_result.speech_started if capture_result is not None else False
+    masked_transcript = _mask_text_for_logging(transcript, config.logging.mask_phone_numbers)
+    early_partial = _extract_last_partial(raw_messages) if finish_reason == "early_intent" else ""
+    masked_early_partial = _mask_text_for_logging(
+        early_partial,
+        config.logging.mask_phone_numbers,
+    )
+    logger.info(
+        (
+            "EAGI listen_diagnostic try=%s had_audio=%s speech_started=%s "
+            "duration_ms=%s stop_reason=%s transcript=%s early_partial=%s"
+        ),
+        retry_count,
+        had_audio,
+        speech_started,
+        duration_ms,
+        finish_reason,
+        masked_transcript or "-",
+        masked_early_partial or "-",
+    )
+
+
+def _extract_last_partial(raw_messages: tuple[dict[str, object], ...]) -> str:
+    for message in reversed(raw_messages):
+        partial = sanitize_channel_value(str(message.get("partial", "")).strip())
+        if partial:
+            return partial
+    return ""

@@ -1,0 +1,111 @@
+"TRANSFER_REQUEST":
+  canonical:
+    - "quiero hablar con un asesor"
+    - "me puede comunicar"
+    - "acepto que me transfieran"
+  aliases:
+    - "comunicame"
+    - "comunícame"
+    - "me comunica"
+    - "me comunicas"
+    - "me comunica con un asesor"
+    - "me comunica con cartera"
+    - "me pasan con cartera"
+    - "quiero que me comuniquen"
+    - "quiero que me pasen"
+    - "quiero hablar con cartera"
+    - "paseme con cartera"
+    - "páseme con cartera"
+    - "pasame con cartera"
+    - "pásame con cartera"
+    - "comuniqueme con cartera"
+    - "comuníqueme con cartera"
+    - "paseme con alguien"
+    - "páseme con alguien"
+    - "necesito hablar con una persona"
+    - "quiero hablar con una persona"
+    - "quiero hablar con alguien"
+    - "me pueden pasar con un asesor"
+
+"NO":
+  canonical:
+    - "no quiero hablar"
+    - "no me transfiera"
+    - "no deseo hablar con asesor"
+  aliases:
+    - "no me comuniquen"
+    - "no quiero que me pasen"
+    - "no quiero hablar con asesor"
+    - "no me transfiera"
+    - "no deseo hablar con un asesor"
+    - "no quiero que me comuniquen"
+
+"INFO_DEUDA":
+  canonical:
+    - "cuanto debo"
+    - "de que es la deuda"
+  aliases:
+    - "quiero saber cuanto debo"
+    - "quiero saber cuánto debo"
+    - "quiero saber cuanto es la deuda"
+    - "quiero saber cuánto es la deuda"
+    - "cuanto es la deuda"
+    - "cuánto es la deuda"
+    - "quiero informacion de la deuda"
+    - "quiero información de la deuda"
+    - "cual es el monto"
+    - "cuál es el monto"
+
+"QUIERE_ACUERDO":
+  canonical:
+    - "quiero hacer un acuerdo"
+    - "quiero llegar a un acuerdo"
+  aliases:
+    - "quiero negociar"
+    - "quiero ponerme al dia con un acuerdo"
+
+"YA_PAGO":
+  canonical:
+    - "ya pague"
+    - "ya realice el pago"
+  aliases:
+    - "tengo comprobante"
+
+"CALLBACK":
+  canonical:
+    - "llameme despues"
+    - "estoy ocupado"
+  aliases:
+    - "mas tarde"
+    - "más tarde"
+    - "en otro momento"
+
+"NUMERO_EQUIVOCADO":
+  canonical:
+    - "numero equivocado"
+  aliases:
+    - "ese numero esta equivocado"
+    - "esa persona no vive aqui"
+
+"NO_ES_PERSONA":
+  canonical:
+    - "no soy esa persona"
+  aliases:
+    - "no corresponde esa persona"
+    - "esa persona no esta aqui"
+
+"TERCERO":
+  canonical:
+    - "soy familiar"
+    - "soy tercero"
+  aliases:
+    - "soy un tercero"
+    - "le habla un familiar"
+
+"FRAUDE_O_DESCONFIANZA":
+  canonical:
+    - "esto es fraude"
+    - "no confio"
+  aliases:
+    - "cómo sé que es real"
+    - "como se que es real"

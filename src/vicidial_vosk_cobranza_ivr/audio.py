@@ -86,6 +86,7 @@ def capture_eagi_audio_result(
     min_speech_ms: int = 250,
     silence_after_speech_ms: int = 700,
     rms_speech_threshold: float = 250.0,
+    initial_silence_timeout_ms: int | None = None,
 ) -> CaptureResult:
     if os.name == "nt":
         raise RuntimeError("La captura EAGI solo se ejecuta en Linux.")
@@ -140,6 +141,12 @@ def capture_eagi_audio_result(
         if not speech_started:
             if vad_enabled:
                 candidate_speech_bytes = 0
+                if (
+                    initial_silence_timeout_ms is not None
+                    and _bytes_to_audio_ms(bytes_read, sample_rate) >= initial_silence_timeout_ms
+                ):
+                    finish_reason = "initial_timeout"
+                    break
             continue
 
         silence_after_speech_bytes += len(chunk)
@@ -154,7 +161,9 @@ def capture_eagi_audio_result(
             finish_reason = "silence_after_speech"
             break
 
-    if bytes_read >= target_bytes or time.monotonic() >= deadline:
+    if finish_reason not in {"silence_after_speech", "initial_timeout", "no_audio"} and (
+        bytes_read >= target_bytes or time.monotonic() >= deadline
+    ):
         finish_reason = "no_audio" if not speech_started else "timeout"
 
     captured_audio = b"".join(chunks)

@@ -155,6 +155,12 @@ def _resolve_or_generate_greeting_audio(
     else:
         LOGGER.info("Saludo personalizado cargado desde cache.")
 
+    LOGGER.debug(
+        "Saludo personalizado listo path=%s playback=%s/%s",
+        output_path,
+        playback_prefix,
+        cache_key,
+    )
     return f"{playback_prefix}/{cache_key}"
 
 

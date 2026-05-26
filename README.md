@@ -16,7 +16,7 @@ IVR de cobranza para VICIdial/Asterisk basado en EAGI y Vosk local por WebSocket
 
 - `agi/vosk_cobranza.py`: entrypoint EAGI.
 - `src/vicidial_vosk_cobranza_ivr/`: logica reutilizable.
-- `config/`: YAML de IVR, intents y logging.
+- `config/`: YAML de IVR, intents, logging y ruteo por cartera.
 - `asterisk/extensions_custom.conf.sample`: ejemplo de dialplan.
 - `scripts/test_audio_file.py`: prueba local con WAV.
 - `tests/`: pruebas unitarias del clasificador y del loader de configuracion.
@@ -34,8 +34,27 @@ El flujo recomendado hoy para validar el proyecto de forma local es:
 
 - `Ubuntu + Asterisk + Vosk en Docker + Zoiper`
 - `1001`: cliente que llama al IVR
-- `1002`: agente o abogado de prueba que recibe la transferencia
+- `1002`: agente o abogado de prueba y fallback de laboratorio para transferencias
 - `9900`: extension del IVR
+
+## Estado estable actual del laboratorio
+
+- Despliegue estable validado: `2026-05-25 22:31 AST`
+- Ruta activa en el servidor local: `/opt/vicidial-vosk-cobranza-ivr`
+- Extension de prueba aislada operativa: `9910`
+- La transferencia del contexto de prueba ya usa `VOSK_TRANSFER_ELIGIBLE=1` o `VOSK_DECISION=TRANSFER`
+- Frases probadas que transfieren: `comunicame`, `quiero pagar`, `cuanto debo`
+- Frases probadas que no transfieren: `no`, `numero equivocado`, `no soy esa persona`
+- Backup mas reciente usado para el despliegue estable: `/root/backup-vosk-deploy-20260525-223126`
+
+Comandos utiles de monitoreo:
+
+```bash
+asterisk -rvvvvv
+agi set debug on
+agi set debug off
+tail -f /var/log/asterisk/vosk_cobranza.log
+```
 
 Activos base del laboratorio:
 
@@ -51,11 +70,11 @@ Flujo recomendado en laboratorio:
 
 1. Asterisk reproduce el prompt del IVR.
 2. `EAGI(vosk_cobranza.py)` escucha la respuesta por voz.
-3. Si el intent es `SI`, `INFO_COBRO` o `PROMESA_PAGO`, el dialplan transfiere a `1002`.
+3. Si el intent es `SI`, `INFO_COBRO` o `PROMESA_PAGO`, el dialplan resuelve `IVR_TRANSFER_TARGET` por cartera y transfiere al destino configurado.
 4. Si el intent es `NO`, `CALLBACK`, `NUMERO_EQUIVOCADO` o `NO_ES_PERSONA`, el flujo finaliza o deja una disposición documentada.
 5. Si el intent es `DUDA` o `SILENCIO`, el dialplan reintenta una vez.
 
-Ese comportamiento esta sampleado en [asterisk/extensions_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_lab.conf.sample).
+Ese comportamiento esta sampleado en [asterisk/extensions_lab.conf.sample](/D:/repos/ai-recepcionista/asterisk/extensions_lab.conf.sample) y toma el fallback de laboratorio desde `config/routing.yml`.
 
 ## Advertencias de laboratorio
 
@@ -150,6 +169,7 @@ Mira `.env.example`. Las mas importantes:
 - `VOSK_COBRANZA_CONFIG`
 - `VOSK_COBRANZA_INTENTS`
 - `VOSK_COBRANZA_LOGGING`
+- `IVR_ROUTING_CONFIG`
 - `VOSK_WEBSOCKET_URL`
 - `VOSK_WEBSOCKET_TIMEOUT_SECONDS`
 - `VOSK_MIN_RMS`
