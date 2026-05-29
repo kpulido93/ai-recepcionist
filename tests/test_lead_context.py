@@ -4,6 +4,7 @@ from pathlib import Path
 
 from vicidial_vosk_cobranza_ivr.lead_context import (
     load_lead_context_from_csv,
+    load_lead_context_from_lab_yaml,
     sanitize_lead_value,
 )
 
@@ -17,6 +18,24 @@ def write_csv(path: Path) -> None:
                 "1002,+1 (809) 555-0102,Luis Gomez,male,Banco Dos,CARTERA_B,CAMP_B,LIST_B",
             ]
         ),
+        encoding="utf-8",
+    )
+
+
+def write_lab_leads_yaml(path: Path) -> None:
+    path.write_text(
+        """
+lab_leads:
+  "1001":
+    lead_id: "lab-maiquer-caribe"
+    nombre: "Maiquer"
+    banco: "Banco Caribe"
+    phone_number: "1001"
+    client_gender: "male"
+    portfolio_id: "caribe_lab"
+    campaign_id: "LAB-OPTIMA"
+    list_id: "LAB-1001"
+""".strip(),
         encoding="utf-8",
     )
 
@@ -58,6 +77,22 @@ def test_load_lead_context_from_csv_returns_none_when_missing(tmp_path: Path) ->
     context = load_lead_context_from_csv(csv_path, lead_id="9999", phone_number="8090000000")
 
     assert context is None
+
+
+def test_load_lead_context_from_lab_yaml_matches_extension(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "lab_leads.yml"
+    write_lab_leads_yaml(yaml_path)
+
+    context = load_lead_context_from_lab_yaml(
+        yaml_path,
+        extension="1001",
+        phone_number="1001",
+    )
+
+    assert context is not None
+    assert context.lead_id == "lab-maiquer-caribe"
+    assert context.client_name == "Maiquer"
+    assert context.bank_name == "Banco Caribe"
 
 
 def test_sanitize_lead_value_limits_length_and_removes_dangerous_values() -> None:

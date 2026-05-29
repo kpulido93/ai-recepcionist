@@ -45,6 +45,41 @@ Los dos audios dinamicos del flujo no se dividen:
 
 No se debe reemplazar ese esquema con `IVR_NAME_AUDIO`, `IVR_BANK_GREETING_AUDIO` ni `gestion-<bank_slug>`.
 
+Cuando existen los archivos instalados por `scripts/generate_optima_9913_elevenlabs_audio.py`, el
+dialplan `9913` intenta primero esta capa corta:
+
+1. `custom/optima-01-saludo-validacion`
+2. `custom/optima-02-pregunta-abogado`
+3. `custom/optima-03-deuda-banco`
+4. `custom/optima-05-no-entendi`
+
+En laboratorio, si la llamada entra desde `1001` o `1002`, el AGI puede resolver primero los
+prompts dinamicos por lead:
+
+- `IVR_OPTIMA_SALUDO_NOMBRE_AUDIO`
+- `IVR_OPTIMA_PREGUNTA_ABOGADO_AUDIO`
+- `IVR_OPTIMA_DEUDA_BANCO_AUDIO`
+
+El wording hablado de esa capa corta debe mantenerse asi:
+
+- marca: `Jurídica Optima`
+- destino humano: `abogado`
+
+El flujo real hace calentamiento antes del primer prompt:
+
+1. `Answer()`
+2. `Wait(1)`
+3. `Playback(silence/1)` si existe
+4. AGIs de contexto/audio
+5. `Wait(0.5)`
+
+Si no hubo respuesta al saludo y `OPTIMA_SILENCE_AFTER_GREETING_CONTINUES=1`, el primer
+`SILENCIO` continua a `custom/optima-02-pregunta-abogado`. Solo despues de un segundo fallo real
+entra a `custom/optima-05-no-entendi`.
+
+Si alguno de esos prompts nuevos no fue instalado, el flujo conserva fallback por segmento al
+Optima anterior y no rompe la llamada.
+
 ## Reintento
 
 - Si la intencion es `DUDA` o `SILENCIO`, el dialplan repite una sola vez.
@@ -58,6 +93,9 @@ No se debe reemplazar ese esquema con `IVR_NAME_AUDIO`, `IVR_BANK_GREETING_AUDIO
 - `first_attempt`
 - `retry_attempt`
 - `objection_probe`
+- `greeting_confirm`
+- `main_question`
+- `offer_confirm`
 
 Si `IVR_LISTEN_PROFILE` no existe, el comportamiento viejo sigue igual y se decide por `TRY` o
 `VOSK_TRY`. Si el valor llega invalido, hace fallback seguro.
@@ -67,6 +105,23 @@ Si `IVR_LISTEN_PROFILE` no existe, el comportamiento viejo sigue igual y se deci
 - `initial_timeout_seconds: 1.8`
 - `max_listen_seconds: 2`
 - `silence_after_speech_ms: 550`
+- `min_speech_ms: 250`
+- `early_detection_min_audio_ms: 250`
+
+`greeting_confirm` se usa solo despues de `optima-01-saludo-validacion`:
+
+- `initial_timeout_seconds: 4.0`
+- `max_listen_seconds: 7`
+- `silence_after_speech_ms: 1500`
+- `min_speech_ms: 250`
+- `early_detection_min_audio_ms: 250`
+
+`main_question` se usa despues de `optima-pregunta-abogado`, `optima-deuda-banco` y
+`optima-05-no-entendi`:
+
+- `initial_timeout_seconds: 5.0`
+- `max_listen_seconds: 8`
+- `silence_after_speech_ms: 1800`
 - `min_speech_ms: 250`
 - `early_detection_min_audio_ms: 250`
 
@@ -85,6 +140,7 @@ Si `IVR_LISTEN_PROFILE` no existe, el comportamiento viejo sigue igual y se deci
 - `VOSK_DECISION`
 - `VOSK_TRANSFER_ELIGIBLE`
 - `IVR_OPTIMA_SALUDO_NOMBRE_AUDIO`
+- `IVR_OPTIMA_PREGUNTA_ABOGADO_AUDIO`
 - `IVR_OPTIMA_DEUDA_BANCO_AUDIO`
 
 ## Hard Stops Y Objecion Unica

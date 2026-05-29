@@ -128,6 +128,27 @@ def build_config() -> AppConfig:
                     min_speech_ms=250,
                     early_detection_min_audio_ms=250,
                 ),
+                greeting_confirm=ListenAttemptSettings(
+                    initial_timeout_seconds=4.0,
+                    max_listen_seconds=7,
+                    silence_after_speech_ms=1500,
+                    min_speech_ms=250,
+                    early_detection_min_audio_ms=250,
+                ),
+                main_question=ListenAttemptSettings(
+                    initial_timeout_seconds=5.0,
+                    max_listen_seconds=8,
+                    silence_after_speech_ms=1800,
+                    min_speech_ms=250,
+                    early_detection_min_audio_ms=250,
+                ),
+                offer_confirm=ListenAttemptSettings(
+                    initial_timeout_seconds=5.0,
+                    max_listen_seconds=8,
+                    silence_after_speech_ms=1800,
+                    min_speech_ms=250,
+                    early_detection_min_audio_ms=250,
+                ),
             ),
         ),
         asterisk=AsteriskSettings(
@@ -779,6 +800,69 @@ def test_run_eagi_session_uses_objection_probe_from_channel_variable() -> None:
     assert result == 0
     assert observed_listen_seconds == [objection_probe.max_listen_seconds]
     assert "GET VARIABLE IVR_LISTEN_PROFILE" in session.commands
+
+
+def test_run_eagi_session_uses_greeting_confirm_from_channel_variable() -> None:
+    session = FakeSession(
+        {"agi_channel": "SIP/test-greeting-confirm", "agi_callerid": "123456"},
+        channel_variables={"IVR_LISTEN_PROFILE": "greeting_confirm"},
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(transcript="si", raw_messages=[{"text": "si"}], confidence=0.95)
+    )
+    service = build_service(vosk_client)
+    config = build_config()
+    profile = config.ivr.listen_profiles.greeting_confirm
+    logger = build_logger("test_eagi_app.greeting_confirm")
+    observed_listen_seconds: list[int] = []
+
+    def capture_audio(fd: int, listen_seconds: int, sample_rate: int) -> bytes:
+        del fd, sample_rate
+        observed_listen_seconds.append(listen_seconds)
+        return b"\xff\x7f" * 400
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=capture_audio,
+        environment=session.environment,
+    )
+
+    assert result == 0
+    assert observed_listen_seconds == [profile.max_listen_seconds]
+
+
+def test_run_eagi_session_uses_main_question_from_channel_variable() -> None:
+    session = FakeSession(
+        {"agi_channel": "SIP/test-main-question", "agi_callerid": "123456"},
+        channel_variables={"IVR_LISTEN_PROFILE": "main_question"},
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(transcript="si", raw_messages=[{"text": "si"}], confidence=0.95)
+    )
+    config = build_config()
+    service = build_service(vosk_client)
+    logger = build_logger("test_eagi_app.main_question")
+    observed_listen_seconds: list[int] = []
+
+    def capture_audio(fd: int, listen_seconds: int, sample_rate: int) -> bytes:
+        del fd, sample_rate
+        observed_listen_seconds.append(listen_seconds)
+        return b"\xff\x7f" * 400
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=capture_audio,
+        environment=session.environment,
+    )
+
+    assert result == 0
+    assert observed_listen_seconds == [config.ivr.listen_profiles.main_question.max_listen_seconds]
 
 
 def test_run_eagi_session_ignores_invalid_listen_profile_value() -> None:

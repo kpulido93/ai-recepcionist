@@ -29,6 +29,18 @@ ivr:
       silence_after_speech_ms: 550
       min_speech_ms: 250
       early_detection_min_audio_ms: 250
+    greeting_confirm:
+      initial_timeout_seconds: 4.0
+      max_listen_seconds: 7
+      silence_after_speech_ms: 1500
+      min_speech_ms: 250
+      early_detection_min_audio_ms: 250
+    main_question:
+      initial_timeout_seconds: 5.0
+      max_listen_seconds: 8
+      silence_after_speech_ms: 1800
+      min_speech_ms: 250
+      early_detection_min_audio_ms: 250
   # Umbral RMS simple para voz en 8 kHz/16-bit mono sin DSP pesado.
   rms_speech_threshold: 250.0
   max_dtmf_wait_ms: 5000
@@ -50,6 +62,7 @@ semantic_classifier:
 
 lead_context:
   csv_path: "lead_context.sample.csv"
+  lab_leads_path: "lab_leads.yml"
 
 prompts:
   personalized_greeting_enabled: true
@@ -111,6 +124,10 @@ optima_audio:
   fallbacks:
     saludo_generico_audio: "custom/optima-01-saludo-generico"
     deuda_generica_audio: "custom/optima-04-deuda-generica"
+
+audio_effects:
+  typing:
+    enabled: false
 
 client_flow_audio:
   enabled: true

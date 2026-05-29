@@ -1,0 +1,19 @@
+lab_leads:
+  "1001":
+    lead_id: "lab-maiquer-caribe"
+    nombre: "Maiquer"
+    banco: "Banco Caribe"
+    phone_number: "1001"
+    client_gender: "male"
+    portfolio_id: "caribe_lab"
+    campaign_id: "LAB-OPTIMA"
+    list_id: "LAB-1001"
+  "1002":
+    lead_id: "lab-kevin-santander"
+    nombre: "Kevin"
+    banco: "Banco Santander"
+    phone_number: "1002"
+    client_gender: "male"
+    portfolio_id: "santander_lab"
+    campaign_id: "LAB-OPTIMA"
+    list_id: "LAB-1002"

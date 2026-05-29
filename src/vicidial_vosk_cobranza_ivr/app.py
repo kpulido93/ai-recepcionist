@@ -44,7 +44,16 @@ from vicidial_vosk_cobranza_ivr.vosk_client import VoskClient
 
 SAFE_AGI_VALUE_LENGTH = 2048
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9_-]+")
-VALID_LISTEN_PROFILE_NAMES = frozenset({"first_attempt", "retry_attempt", "objection_probe"})
+VALID_LISTEN_PROFILE_NAMES = frozenset(
+    {
+        "first_attempt",
+        "retry_attempt",
+        "objection_probe",
+        "greeting_confirm",
+        "main_question",
+        "offer_confirm",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -883,6 +892,12 @@ def _resolve_listen_attempt_settings(
         return config.ivr.listen_profiles.retry_attempt
     if requested_profile_name == "objection_probe":
         return config.ivr.listen_profiles.objection_probe
+    if requested_profile_name == "greeting_confirm":
+        return config.ivr.listen_profiles.greeting_confirm
+    if requested_profile_name == "main_question":
+        return config.ivr.listen_profiles.main_question
+    if requested_profile_name == "offer_confirm":
+        return config.ivr.listen_profiles.offer_confirm
     if retry_count <= 0:
         return config.ivr.listen_profiles.first_attempt
     return config.ivr.listen_profiles.retry_attempt

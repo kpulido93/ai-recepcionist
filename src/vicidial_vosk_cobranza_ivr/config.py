@@ -53,6 +53,15 @@ DEFAULT_INITIAL_TIMEOUT_SECONDS = 5.0
 DEFAULT_OBJECTION_PROBE_INITIAL_TIMEOUT_SECONDS = 1.8
 DEFAULT_OBJECTION_PROBE_MAX_LISTEN_SECONDS = 2
 DEFAULT_OBJECTION_PROBE_SILENCE_AFTER_SPEECH_MS = 550
+DEFAULT_GREETING_CONFIRM_INITIAL_TIMEOUT_SECONDS = 4.0
+DEFAULT_GREETING_CONFIRM_MAX_LISTEN_SECONDS = 7
+DEFAULT_GREETING_CONFIRM_SILENCE_AFTER_SPEECH_MS = 1500
+DEFAULT_MAIN_QUESTION_INITIAL_TIMEOUT_SECONDS = 5.0
+DEFAULT_MAIN_QUESTION_MAX_LISTEN_SECONDS = 8
+DEFAULT_MAIN_QUESTION_SILENCE_AFTER_SPEECH_MS = 1800
+DEFAULT_OFFER_CONFIRM_INITIAL_TIMEOUT_SECONDS = 5.0
+DEFAULT_OFFER_CONFIRM_MAX_LISTEN_SECONDS = 8
+DEFAULT_OFFER_CONFIRM_SILENCE_AFTER_SPEECH_MS = 1800
 DEFAULT_OPTIMA_AUDIO_ENABLED = True
 DEFAULT_OPTIMA_AUDIO_PROVIDER = "elevenlabs"
 DEFAULT_OPTIMA_AUDIO_CACHE_ENABLED = True
@@ -124,6 +133,18 @@ def _default_objection_probe_settings() -> ListenAttemptSettings:
     return build_default_objection_probe_settings()
 
 
+def _default_greeting_confirm_settings() -> ListenAttemptSettings:
+    return build_default_greeting_confirm_settings()
+
+
+def _default_offer_confirm_settings() -> ListenAttemptSettings:
+    return build_default_offer_confirm_settings()
+
+
+def _default_main_question_settings() -> ListenAttemptSettings:
+    return build_default_main_question_settings()
+
+
 @dataclass(frozen=True)
 class ListenProfilesSettings:
     first_attempt: ListenAttemptSettings
@@ -131,6 +152,11 @@ class ListenProfilesSettings:
     objection_probe: ListenAttemptSettings = field(
         default_factory=_default_objection_probe_settings
     )
+    greeting_confirm: ListenAttemptSettings = field(
+        default_factory=_default_greeting_confirm_settings
+    )
+    main_question: ListenAttemptSettings = field(default_factory=_default_main_question_settings)
+    offer_confirm: ListenAttemptSettings = field(default_factory=_default_offer_confirm_settings)
 
 
 @dataclass(frozen=True)
@@ -544,6 +570,9 @@ def build_default_listen_profiles(
         first_attempt=base_attempt,
         retry_attempt=base_attempt,
         objection_probe=build_default_objection_probe_settings(),
+        greeting_confirm=build_default_greeting_confirm_settings(),
+        main_question=build_default_main_question_settings(),
+        offer_confirm=build_default_offer_confirm_settings(),
     )
 
 
@@ -552,6 +581,36 @@ def build_default_objection_probe_settings() -> ListenAttemptSettings:
         initial_timeout_seconds=DEFAULT_OBJECTION_PROBE_INITIAL_TIMEOUT_SECONDS,
         max_listen_seconds=DEFAULT_OBJECTION_PROBE_MAX_LISTEN_SECONDS,
         silence_after_speech_ms=DEFAULT_OBJECTION_PROBE_SILENCE_AFTER_SPEECH_MS,
+        min_speech_ms=DEFAULT_MIN_SPEECH_MS,
+        early_detection_min_audio_ms=DEFAULT_EARLY_DETECTION_MIN_AUDIO_MS,
+    )
+
+
+def build_default_greeting_confirm_settings() -> ListenAttemptSettings:
+    return ListenAttemptSettings(
+        initial_timeout_seconds=DEFAULT_GREETING_CONFIRM_INITIAL_TIMEOUT_SECONDS,
+        max_listen_seconds=DEFAULT_GREETING_CONFIRM_MAX_LISTEN_SECONDS,
+        silence_after_speech_ms=DEFAULT_GREETING_CONFIRM_SILENCE_AFTER_SPEECH_MS,
+        min_speech_ms=DEFAULT_MIN_SPEECH_MS,
+        early_detection_min_audio_ms=DEFAULT_EARLY_DETECTION_MIN_AUDIO_MS,
+    )
+
+
+def build_default_main_question_settings() -> ListenAttemptSettings:
+    return ListenAttemptSettings(
+        initial_timeout_seconds=DEFAULT_MAIN_QUESTION_INITIAL_TIMEOUT_SECONDS,
+        max_listen_seconds=DEFAULT_MAIN_QUESTION_MAX_LISTEN_SECONDS,
+        silence_after_speech_ms=DEFAULT_MAIN_QUESTION_SILENCE_AFTER_SPEECH_MS,
+        min_speech_ms=DEFAULT_MIN_SPEECH_MS,
+        early_detection_min_audio_ms=DEFAULT_EARLY_DETECTION_MIN_AUDIO_MS,
+    )
+
+
+def build_default_offer_confirm_settings() -> ListenAttemptSettings:
+    return ListenAttemptSettings(
+        initial_timeout_seconds=DEFAULT_OFFER_CONFIRM_INITIAL_TIMEOUT_SECONDS,
+        max_listen_seconds=DEFAULT_OFFER_CONFIRM_MAX_LISTEN_SECONDS,
+        silence_after_speech_ms=DEFAULT_OFFER_CONFIRM_SILENCE_AFTER_SPEECH_MS,
         min_speech_ms=DEFAULT_MIN_SPEECH_MS,
         early_detection_min_audio_ms=DEFAULT_EARLY_DETECTION_MIN_AUDIO_MS,
     )
@@ -591,6 +650,18 @@ def _build_listen_profiles_settings(ivr_config: dict[str, Any]) -> ListenProfile
         objection_probe=_build_listen_attempt_settings(
             raw_listen_config.get("objection_probe", {}),
             defaults.objection_probe,
+        ),
+        greeting_confirm=_build_listen_attempt_settings(
+            raw_listen_config.get("greeting_confirm", {}),
+            defaults.greeting_confirm,
+        ),
+        main_question=_build_listen_attempt_settings(
+            raw_listen_config.get("main_question", raw_listen_config.get("offer_confirm", {})),
+            defaults.main_question,
+        ),
+        offer_confirm=_build_listen_attempt_settings(
+            raw_listen_config.get("offer_confirm", {}),
+            defaults.offer_confirm,
         ),
     )
 

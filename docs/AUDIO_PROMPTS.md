@@ -34,6 +34,38 @@ La secuencia segmentada recomendada queda asi:
 7. `optima-07-callback`
 8. `optima-objecion-unica` solo si aparece una objecion valida
 
+Adicionalmente, el laboratorio `9913` puede usar un paquete corto de prompts instalados con
+ElevenLabs y fallback al flujo segmentado anterior si esos archivos no existen:
+
+- `custom/optima-01-saludo-validacion`
+- `custom/optima-02-pregunta-abogado`
+- `custom/optima-03-deuda-banco`
+- `custom/optima-04-permitame-terminar`
+- `custom/optima-05-no-entendi`
+
+En laboratorio, `9913` tambien puede resolver un paquete dinamico por extension usando
+`config/lab_leads.yml`:
+
+- `1001` -> `custom/optima-lab-maiquer-caribe-saludo`
+- `1001` -> `custom/optima-lab-maiquer-caribe-pregunta-abogado`
+- `1001` -> `custom/optima-lab-maiquer-caribe-deuda-banco`
+- `1002` -> `custom/optima-lab-kevin-santander-saludo`
+- `1002` -> `custom/optima-lab-kevin-santander-pregunta-abogado`
+- `1002` -> `custom/optima-lab-kevin-santander-deuda-banco`
+
+Esos prompts hablan siempre con la marca `Jurídica Optima` y el destino humano `abogado`.
+
+En el runtime real esos prompts deben instalarse en:
+
+- `/usr/share/asterisk/sounds/custom`
+- `/usr/share/asterisk/sounds/en/custom`
+- espejo opcional en `/var/lib/asterisk/sounds/custom`
+
+Para evitar que el caller pierda el arranque del primer prompt, `optima-01-saludo-validacion`
+lleva `500 ms` de silencio inicial. `optima-02-pregunta-abogado`, `optima-03-deuda-banco`,
+`optima-04-permitame-terminar` y `optima-05-no-entendi` llevan `200-300 ms` de silencio inicial.
+Ademas del WAV `8 kHz`, `mono`, `PCM 16-bit`, el instalador deja una copia `.slin`.
+
 ## Reglas De Wording
 
 - Evita decir frases exactas de intents fuertes si esas frases activan acciones.
@@ -127,6 +159,15 @@ ElevenLabs se usa como complemento para generar activos de audio y audios person
 - Para el flujo Optima puedes definir `optima_audio.env_file` en `config/ivr.yml` si el proceso
   AGI no hereda el entorno del usuario que administra Asterisk.
 
+Para el instalador de prompts `9913`, la regla es mas estricta:
+
+- `scripts/generate_optima_9913_elevenlabs_audio.py` puede leer `ELEVENLABS_API_KEY` y
+  `ELEVENLABS_VOICE_ID` desde el environment del proceso o cargar
+  `/etc/default/vicidial-vosk-cobranza-ivr` si el proceso no hereda esas variables.
+- Ese script no ejecuta shell dentro de Python ni evalua codigo dinamico.
+- Si falta `ELEVENLABS_API_KEY`, no borra ni reemplaza audios existentes y solo documenta que la
+  generacion real fue omitida.
+
 No conviertas ElevenLabs en dependencia funcional del IVR. El camino principal debe seguir operando
 con audio local y fallback seguro.
 
@@ -208,6 +249,53 @@ Ese script:
 - genera cache dinamica para nombres y bancos desde `config/lead_context.sample.csv`
 - guarda una copia canonica en `artifacts/lab-prompts`
 - valida el WAV final con `ffprobe` o `soxi` cuando alguna de esas herramientas esta disponible
+
+Para instalar los cinco prompts nuevos del flujo `9913` existe otro script:
+
+```bash
+python scripts/generate_optima_9913_elevenlabs_audio.py --dry-run
+python scripts/generate_optima_9913_elevenlabs_audio.py \
+  --install-dir /usr/share/asterisk/sounds/custom
+```
+
+Ese script:
+
+- usa temporales fuera del repo en `/tmp/optima-9913-elevenlabs`
+- instala en `/usr/share/asterisk/sounds/custom`
+- espeja en `/usr/share/asterisk/sounds/en/custom`
+- puede espejar en `/var/lib/asterisk/sounds/custom`
+- valida WAV y `.slin` antes de devolver `0`
+
+## Prompts Base Del 9913
+
+El flujo `9913` usa cinco WAV fijos como ruta principal cuando existen:
+
+- `custom/optima-01-saludo-validacion`
+- `custom/optima-02-pregunta-abogado`
+- `custom/optima-03-deuda-banco`
+- `custom/optima-04-permitame-terminar`
+- `custom/optima-05-no-entendi`
+
+Esos cinco archivos no sustituyen la arquitectura dinámica de Optima:
+
+- `IVR_OPTIMA_SALUDO_NOMBRE_AUDIO` sigue siendo el audio dinámico por nombre.
+- `IVR_OPTIMA_PREGUNTA_ABOGADO_AUDIO` resuelve la pregunta principal por lead en laboratorio.
+- `IVR_OPTIMA_DEUDA_BANCO_AUDIO` sigue siendo el audio dinámico por banco.
+
+Para no dejar PII fija dentro de un WAV reutilizado para otros leads, el instalador
+`scripts/generate_optima_9913_elevenlabs_audio.py` genera versiones base neutrales:
+
+- saludo validación: `Saludos. ¿Hablo con usted? Le escucho.`
+- pregunta abogado: `Gracias. Le llamamos de Jurídica Optima por una gestión pendiente. ¿Desea que le comunique con un abogado para revisar su caso? Le escucho.`
+- deuda banco: `Le estamos llamando por la deuda que usted ya conoce. Para más detalles puedo comunicarle con un abogado. ¿Desea que le comunique? Le escucho.`
+
+El flujo activo del `9913` usa esos WAV como ruta normal y deja los prompts viejos
+solo como emergencia si falta alguno de los archivos nuevos.
+- copia espejo a `/usr/share/asterisk/sounds/custom` si la ruta existe
+- valida cada WAV con `soxi`
+- no escribe binarios nuevos dentro del repo como ruta de instalacion
+- usa `ELEVENLABS_VOICE_ID` desde environment si existe; si no, toma el `voice_id` ya configurado
+- usa `model_id=eleven_multilingual_v2` salvo que el repo ya tenga otra configuracion
 
 ## Validacion Practica
 

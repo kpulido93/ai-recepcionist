@@ -59,6 +59,18 @@ ivr:
       silence_after_speech_ms: 550
       min_speech_ms: 250
       early_detection_min_audio_ms: 250
+    greeting_confirm:
+      initial_timeout_seconds: 4.0
+      max_listen_seconds: 7
+      silence_after_speech_ms: 1500
+      min_speech_ms: 250
+      early_detection_min_audio_ms: 250
+    main_question:
+      initial_timeout_seconds: 5.0
+      max_listen_seconds: 8
+      silence_after_speech_ms: 1800
+      min_speech_ms: 250
+      early_detection_min_audio_ms: 250
   rms_speech_threshold: 250.0
   max_dtmf_wait_ms: 3000
   dtmf_map:
@@ -156,6 +168,12 @@ optima_audio:
     assert config.ivr.listen_profiles.retry_attempt.initial_timeout_seconds == 4.5
     assert config.ivr.listen_profiles.objection_probe.initial_timeout_seconds == 1.8
     assert config.ivr.listen_profiles.objection_probe.max_listen_seconds == 2
+    assert config.ivr.listen_profiles.greeting_confirm.initial_timeout_seconds == 4.0
+    assert config.ivr.listen_profiles.greeting_confirm.max_listen_seconds == 7
+    assert config.ivr.listen_profiles.main_question.initial_timeout_seconds == 5.0
+    assert config.ivr.listen_profiles.main_question.max_listen_seconds == 8
+    assert config.ivr.listen_profiles.offer_confirm.initial_timeout_seconds == 5.0
+    assert config.ivr.listen_profiles.offer_confirm.max_listen_seconds == 8
     assert config.ivr.rms_speech_threshold == 250.0
     assert config.vosk.sample_rate == 8000
     assert config.vosk.websocket_url == "ws://127.0.0.1:2700"
@@ -251,6 +269,9 @@ logging:
     assert config.ivr.listen_profiles.first_attempt.max_listen_seconds == 4
     assert config.ivr.listen_profiles.retry_attempt.max_listen_seconds == 4
     assert config.ivr.listen_profiles.objection_probe.max_listen_seconds == 2
+    assert config.ivr.listen_profiles.greeting_confirm.max_listen_seconds == 7
+    assert config.ivr.listen_profiles.main_question.max_listen_seconds == 8
+    assert config.ivr.listen_profiles.offer_confirm.max_listen_seconds == 8
     assert config.logging.mask_phone_numbers is True
     assert config.logging.events_path == DEFAULT_EVENTS_PATH
     assert config.logging.debug_audio_dump_enabled is True
@@ -320,6 +341,9 @@ logging:
     assert config.ivr.listen_profiles.retry_attempt.max_listen_seconds == 5
     assert config.ivr.listen_profiles.first_attempt.initial_timeout_seconds == 5.0
     assert config.ivr.listen_profiles.objection_probe.initial_timeout_seconds == 1.8
+    assert config.ivr.listen_profiles.greeting_confirm.initial_timeout_seconds == 4.0
+    assert config.ivr.listen_profiles.main_question.initial_timeout_seconds == 5.0
+    assert config.ivr.listen_profiles.offer_confirm.initial_timeout_seconds == 5.0
     assert config.ivr.rms_speech_threshold == 250.0
     assert config.logging.mask_phone_numbers is True
     assert config.logging.events_path == DEFAULT_EVENTS_PATH

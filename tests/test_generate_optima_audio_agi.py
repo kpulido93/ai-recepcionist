@@ -107,6 +107,7 @@ def test_generate_optima_audio_agi_sets_playback_paths_when_cache_exists(
     (cache_dir / build_optima_audio_filename(OPTIMA_SALUDO_NOMBRE, saludo_key)).write_bytes(b"wav")
     (cache_dir / build_optima_audio_filename(OPTIMA_DEUDA_BANCO, deuda_key)).write_bytes(b"wav")
     monkeypatch.setenv("VOSK_COBRANZA_CONFIG", str(config_path))
+    monkeypatch.setenv("ELEVENLABS_VOICE_ID", "voice-demo")
     module = load_agi_module()
     session = FakeAgiSession(
         {
@@ -126,6 +127,10 @@ def test_generate_optima_audio_agi_sets_playback_paths_when_cache_exists(
         session.variables["IVR_OPTIMA_DEUDA_BANCO_AUDIO"]
         == f"custom/generated/optima/optima-04-deuda-banco-{deuda_key}"
     )
+    assert (
+        session.variables["IVR_OPTIMA_PREGUNTA_ABOGADO_AUDIO"]
+        == "custom/optima-02-pregunta-abogado"
+    )
 
 
 def test_generate_optima_audio_agi_uses_fallback_when_name_is_missing(
@@ -135,6 +140,7 @@ def test_generate_optima_audio_agi_uses_fallback_when_name_is_missing(
     config_path = tmp_path / "ivr.yml"
     write_config(config_path, tmp_path / "generated" / "optima")
     monkeypatch.setenv("VOSK_COBRANZA_CONFIG", str(config_path))
+    monkeypatch.setenv("ELEVENLABS_VOICE_ID", "voice-demo")
     module = load_agi_module()
     session = FakeAgiSession({"GET VARIABLE IVR_BANK_NAME": "200 result=1 (Banco Popular)"})
 
@@ -142,6 +148,10 @@ def test_generate_optima_audio_agi_uses_fallback_when_name_is_missing(
 
     assert exit_code == 0
     assert session.variables["IVR_OPTIMA_SALUDO_NOMBRE_AUDIO"] == "custom/optima-01-saludo-generico"
+    assert (
+        session.variables["IVR_OPTIMA_PREGUNTA_ABOGADO_AUDIO"]
+        == "custom/optima-02-pregunta-abogado"
+    )
 
 
 def test_generate_optima_audio_agi_uses_fallback_when_bank_is_missing(
@@ -151,6 +161,7 @@ def test_generate_optima_audio_agi_uses_fallback_when_bank_is_missing(
     config_path = tmp_path / "ivr.yml"
     write_config(config_path, tmp_path / "generated" / "optima")
     monkeypatch.setenv("VOSK_COBRANZA_CONFIG", str(config_path))
+    monkeypatch.setenv("ELEVENLABS_VOICE_ID", "voice-demo")
     module = load_agi_module()
     session = FakeAgiSession({"GET VARIABLE IVR_CLIENT_NAME": "200 result=1 (Juan Perez)"})
 
@@ -158,3 +169,53 @@ def test_generate_optima_audio_agi_uses_fallback_when_bank_is_missing(
 
     assert exit_code == 0
     assert session.variables["IVR_OPTIMA_DEUDA_BANCO_AUDIO"] == "custom/optima-04-deuda-generica"
+    assert (
+        session.variables["IVR_OPTIMA_PREGUNTA_ABOGADO_AUDIO"]
+        == "custom/optima-02-pregunta-abogado"
+    )
+
+
+def test_generate_optima_audio_agi_sets_lab_9913_prompt_paths(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "ivr.yml"
+    write_config(config_path, tmp_path / "generated" / "optima")
+    monkeypatch.setenv("VOSK_COBRANZA_CONFIG", str(config_path))
+    module = load_agi_module()
+
+    def fake_generate(prompt_kind, **kwargs):
+        lead_id = kwargs["lead_id"]
+        suffix = {
+            "saludo": "saludo",
+            "pregunta_abogado": "pregunta-abogado",
+            "deuda_banco": "deuda-banco",
+        }[prompt_kind]
+        output_path = tmp_path / f"optima-{lead_id}-{suffix}.wav"
+        output_path.write_bytes(b"wav")
+        return output_path
+
+    monkeypatch.setattr(module, "get_or_generate_optima_9913_lab_audio", fake_generate)
+    session = FakeAgiSession(
+        {
+            "GET VARIABLE IVR_LEAD_ID": "200 result=1 (lab-maiquer-caribe)",
+            "GET VARIABLE IVR_CLIENT_NAME": "200 result=1 (Maiquer)",
+            "GET VARIABLE IVR_BANK_NAME": "200 result=1 (Banco Caribe)",
+        }
+    )
+
+    exit_code = module.run_generate_optima_audio(session=session, environment={})
+
+    assert exit_code == 0
+    assert (
+        session.variables["IVR_OPTIMA_SALUDO_NOMBRE_AUDIO"]
+        == "custom/optima-lab-maiquer-caribe-saludo"
+    )
+    assert (
+        session.variables["IVR_OPTIMA_PREGUNTA_ABOGADO_AUDIO"]
+        == "custom/optima-lab-maiquer-caribe-pregunta-abogado"
+    )
+    assert (
+        session.variables["IVR_OPTIMA_DEUDA_BANCO_AUDIO"]
+        == "custom/optima-lab-maiquer-caribe-deuda-banco"
+    )

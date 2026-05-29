@@ -56,12 +56,14 @@ from vicidial_vosk_cobranza_ivr.config import PROJECT_ROOT  # noqa: E402
 from vicidial_vosk_cobranza_ivr.lead_context import (  # noqa: E402
     LeadContext,
     load_lead_context_from_csv,
+    load_lead_context_from_lab_yaml,
     sanitize_lead_value,
 )
 
 LOGGER = logging.getLogger("vicidial_vosk_cobranza_ivr.lead_context")
 LEAD_CONTEXT_VARIABLES = {
     "IVR_CLIENT_NAME": "client_name",
+    "IVR_PERSON_NAME": "client_name",
     "IVR_CLIENT_GENDER": "client_gender",
     "IVR_BANK_NAME": "bank_name",
     "IVR_PORTFOLIO_ID": "portfolio_id",
@@ -92,8 +94,20 @@ def run_load_lead_context(session: AgiSession, environment: dict[str, str]) -> i
         phone_number = sanitize_lead_value(environment.get("agi_callerid"))
 
     context: LeadContext | None = None
+    lab_leads_path = resolve_lab_leads_path()
+    if lab_leads_path is not None:
+        try:
+            context = load_lead_context_from_lab_yaml(
+                lab_leads_path,
+                lead_id=lead_id,
+                extension=phone_number,
+                phone_number=phone_number,
+            )
+        except OSError as exc:
+            LOGGER.warning("No fue posible leer YAML de leads de laboratorio: %s", exc)
+
     csv_path = resolve_lead_context_csv_path()
-    if csv_path is not None:
+    if context is None and csv_path is not None:
         try:
             context = load_lead_context_from_csv(
                 csv_path,
@@ -144,6 +158,21 @@ def resolve_lead_context_csv_path() -> Path | None:
     return (config_path.parent / configured_path).resolve()
 
 
+def resolve_lab_leads_path() -> Path | None:
+    env_value = os.getenv("IVR_LAB_LEADS_YML")
+    if env_value:
+        return Path(env_value).expanduser().resolve()
+
+    config_path = Path(os.getenv("VOSK_COBRANZA_CONFIG", PROJECT_ROOT / "config" / "ivr.yml"))
+    config_path = config_path.expanduser().resolve()
+    configured_path = _read_lab_leads_path_from_config(config_path)
+    if configured_path is None:
+        return PROJECT_ROOT / "config" / "lab_leads.yml"
+    if configured_path.is_absolute():
+        return configured_path
+    return (config_path.parent / configured_path).resolve()
+
+
 def _read_csv_path_from_config(config_path: Path) -> Path | None:
     try:
         with config_path.open("r", encoding="utf-8") as file_handler:
@@ -163,6 +192,27 @@ def _read_csv_path_from_config(config_path: Path) -> Path | None:
     if not csv_path:
         return None
     return Path(str(csv_path)).expanduser()
+
+
+def _read_lab_leads_path_from_config(config_path: Path) -> Path | None:
+    try:
+        with config_path.open("r", encoding="utf-8") as file_handler:
+            config_data = yaml.safe_load(file_handler) or {}
+    except OSError as exc:
+        LOGGER.warning("No fue posible leer configuración IVR para leads de laboratorio: %s", exc)
+        return None
+
+    if not isinstance(config_data, dict):
+        return None
+
+    lead_context_config = config_data.get("lead_context", {})
+    if not isinstance(lead_context_config, dict):
+        return None
+
+    lab_leads_path = lead_context_config.get("lab_leads_path")
+    if not lab_leads_path:
+        return None
+    return Path(str(lab_leads_path)).expanduser()
 
 
 def _read_agi_or_env_value(
