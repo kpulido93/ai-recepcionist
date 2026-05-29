@@ -23,6 +23,12 @@ ivr:
       silence_after_speech_ms: 700
       min_speech_ms: 250
       early_detection_min_audio_ms: 250
+    objection_probe:
+      initial_timeout_seconds: 1.8
+      max_listen_seconds: 2
+      silence_after_speech_ms: 550
+      min_speech_ms: 250
+      early_detection_min_audio_ms: 250
   # Umbral RMS simple para voz en 8 kHz/16-bit mono sin DSP pesado.
   rms_speech_threshold: 250.0
   max_dtmf_wait_ms: 5000
@@ -78,6 +84,56 @@ name_audio:
     male: "Señor {name},"
     female: "Señora {name},"
     unknown: "{name},"
+  elevenlabs:
+    api_key_env: "ELEVENLABS_API_KEY"
+    voice_id_env: "ELEVENLABS_VOICE_ID"
+    voice_id: "IoWn77TsmQnza94sYlfg"
+    model_id: "eleven_multilingual_v2"
+    output_format: "mp3_44100_128"
+    timeout_seconds: 15
+
+optima_audio:
+  enabled: true
+  provider: "elevenlabs"
+  cache_enabled: true
+  cache_dir: "/var/lib/asterisk/sounds/custom/generated/optima"
+  mirror_dirs:
+    - "/usr/share/asterisk/sounds/custom/generated/optima"
+  playback_prefix: "custom/generated/optima"
+  version: "v1-optima-segmented"
+  env_file: null
+  max_name_chars: 80
+  max_bank_chars: 120
+  fallback_on_error: true
+  templates:
+    saludo_nombre: "Saludos {name}."
+    deuda_banco: "Por la deuda que mantiene en {bank}."
+  fallbacks:
+    saludo_generico_audio: "custom/optima-01-saludo-generico"
+    deuda_generica_audio: "custom/optima-04-deuda-generica"
+
+client_flow_audio:
+  enabled: true
+  provider: "elevenlabs"
+  cache_enabled: true
+  cache_dir: "/var/lib/asterisk/sounds/custom/generated/client-flow-9912"
+  mirror_dirs:
+    - "/usr/share/asterisk/sounds/custom/generated/client-flow-9912"
+  playback_prefix: "custom/generated/client-flow-9912"
+  version: "v2-client-flow-9912"
+  trailing_silence_ms: 800
+  fallback_on_error: true
+  defaults:
+    debtor: "Kevin"
+    bank: "Banco de Prueba"
+    gender: "male"
+  prompts:
+    greeting_templates:
+      male: "Saludos. ¿Cómo está, señor {name}?"
+      female: "Saludos. ¿Cómo está, señora {name}?"
+      unknown: "Saludos. ¿Cómo está, {name}?"
+    bank: "Le llamo con relación a la deuda que usted mantiene con el {bank}."
+    debt_known: "Le estamos llamando por la deuda que tiene con {bank}, que usted ya conoce."
   elevenlabs:
     api_key_env: "ELEVENLABS_API_KEY"
     voice_id_env: "ELEVENLABS_VOICE_ID"

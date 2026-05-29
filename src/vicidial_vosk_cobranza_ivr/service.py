@@ -57,6 +57,7 @@ class CobranzaIvrService:
         sample_rate: int,
         dtmf: str | None = None,
         retry_count: int = 0,
+        flow_stage: str | None = None,
     ) -> ProcessingOutcome:
         dtmf_classification = self.classifier.classify_dtmf(dtmf)
         if dtmf_classification is not None:
@@ -65,7 +66,11 @@ class CobranzaIvrService:
                 source=dtmf_classification.source,
                 confidence=dtmf_classification.confidence,
                 finish_reason="dtmf",
-                decision=self._decide(dtmf_classification, retry_count=retry_count),
+                decision=self._decide(
+                    dtmf_classification,
+                    retry_count=retry_count,
+                    flow_stage=flow_stage,
+                ),
                 dtmf=dtmf,
             )
 
@@ -78,7 +83,11 @@ class CobranzaIvrService:
                 source="silence",
                 confidence=0.0,
             )
-            silence_decision = self._decide(silence_classification, retry_count=retry_count)
+            silence_decision = self._decide(
+                silence_classification,
+                retry_count=retry_count,
+                flow_stage=flow_stage,
+            )
             return ProcessingOutcome(
                 intent=silence_classification.intent,
                 transcript=silence_classification.transcript,
@@ -98,7 +107,12 @@ class CobranzaIvrService:
         try:
             recognition = self.vosk_client.transcribe_pcm(audio_bytes, sample_rate)
         except VoskError as exc:
-            self.logger.warning("Fallo Vosk, usando source=error: %s", exc)
+            self.logger.warning(
+                "Fallo Vosk, usando source=error: flow_stage=%s retry_count=%s exception=%s",
+                flow_stage or "",
+                retry_count,
+                exc,
+            )
             return _build_error_outcome(self.config.ivr.default_intent)
 
         if recognition.early_intent:
@@ -117,11 +131,18 @@ class CobranzaIvrService:
                 source=early_classification.source,
                 confidence=confidence,
                 finish_reason=recognition.finish_reason,
-                decision=self._decide(early_classification, retry_count=retry_count),
+                decision=self._decide(
+                    early_classification,
+                    retry_count=retry_count,
+                    flow_stage=flow_stage,
+                ),
                 raw_messages=tuple(recognition.raw_messages),
             )
 
-        classification = self.classifier.classify(transcript=recognition.transcript)
+        classification = self.classifier.classify(
+            transcript=recognition.transcript,
+            flow_stage=flow_stage,
+        )
         source = (
             "silence"
             if intent_equals(classification.intent, Intent.SILENCIO)
@@ -145,7 +166,11 @@ class CobranzaIvrService:
             source=source,
             confidence=confidence,
             finish_reason=recognition.finish_reason,
-            decision=self._decide(resolved_classification, retry_count=retry_count),
+            decision=self._decide(
+                resolved_classification,
+                retry_count=retry_count,
+                flow_stage=flow_stage,
+            ),
             raw_messages=tuple(recognition.raw_messages),
         )
 
@@ -154,6 +179,7 @@ class CobranzaIvrService:
         classification: IntentClassification,
         *,
         retry_count: int,
+        flow_stage: str | None = None,
     ) -> DecisionOutcome:
         return self.decision_engine.decide(
             intent=classification.intent,
@@ -162,6 +188,7 @@ class CobranzaIvrService:
             matched_value=classification.matched_value,
             source=classification.source,
             retry_count=retry_count,
+            flow_stage=flow_stage,
         )
 
 

@@ -11,7 +11,7 @@ Referencia operativa del ultimo despliegue estable validado en el servidor local
 - Fecha y hora: `2026-05-25 22:31 AST`
 - Ruta activa: `/opt/vicidial-vosk-cobranza-ivr`
 - Extensiones de prueba funcionando correctamente: `9910` y `9911`
-- `9911` reproduce primero un saludo mínimo cacheado (`custom/generated/names/senor-kevin-99aa8b8fc2f0`, texto `Señor Kevin,`) y luego `custom/mensaje-cobranza`
+- `9911` resuelve `IVR_CLIENT_NAME` e `IVR_CLIENT_GENDER` desde `lead_context`, reproduce `Playback(${IVR_NAME_AUDIO})` cuando existe y luego `custom/mensaje-cobranza`
 - La transferencia del contexto de prueba ya depende de `VOSK_TRANSFER_ELIGIBLE=1` o `VOSK_DECISION=TRANSFER`
 - Frases probadas que transfieren: `comunicame`, `quiero pagar`, `cuanto debo`
 - Frases probadas que no transfieren: `no`, `numero equivocado`, `no soy esa persona`
@@ -310,20 +310,22 @@ Prueba rapida sin CSV:
 El AGI `load_lead_context.py` espera un CSV con estas columnas:
 
 ```text
-lead_id,phone_number,client_name,bank_name,portfolio_id,campaign_id,list_id
+lead_id,phone_number,client_name,client_gender,bank_name,portfolio_id,campaign_id,list_id
 ```
 
 Ejemplo seguro para laboratorio:
 
 ```text
-lead_id,phone_number,client_name,bank_name,portfolio_id,campaign_id,list_id
-lab-001,8095550101,Juan,Banco Popular,popular_mora_30,CAMP_LAB,LIST_LAB
-lab-002,8095550102,Ana,Banco BHD,bhd_mora_60,CAMP_LAB,LIST_LAB
+lead_id,phone_number,client_name,client_gender,bank_name,portfolio_id,campaign_id,list_id
+lab-1001,1001,Kevin,male,Banco Popular,popular_mora_30,LAB-CAMP,LAB-LIST
+lab-1003,1003,María,female,Banco BHD,bhd_mora_60,LAB-CAMP,LAB-LIST
+lab-1004,1004,Carlos,unknown,Banco Reservas,reservas_mora_90,LAB-CAMP,LAB-LIST
 ```
 
 Notas utiles:
 
 - Si en el dialplan usas `Set(IVR_PHONE_NUMBER=${CALLERID(num)})`, el valor del caller ID debe coincidir con `phone_number`.
+- `9911` del laboratorio usa lookup por `CALLERID(num)` para resolver el saludo mínimo dinámico con `AGI(load_lead_context.py)` y `AGI(generate_name_audio.py)`.
 - Si prefieres buscar solo por `lead_id`, usa un `IVR_LEAD_ID` unico por prueba y mantelo consistente con el CSV.
 - Puedes sobrescribir la ruta del CSV con `IVR_LEAD_CONTEXT_CSV`, pero en el laboratorio basta con editar `config/lead_context.sample.csv`.
 

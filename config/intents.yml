@@ -146,6 +146,87 @@
   - "en otro momento"
   - "estoy trabajando"
 
+"CALLBACK_MANANA":
+  - "mañana"
+  - "llámeme mañana"
+  - "llameme mañana"
+  - "mañana me puede llamar"
+  - "mejor mañana"
+  - "hablemos mañana"
+
+"WHATSAPP_INFO":
+  - "envíeme por WhatsApp"
+  - "envieme por whatsapp"
+  - "mándeme la información"
+  - "mandeme la informacion"
+  - "por WhatsApp"
+  - "al WhatsApp"
+  - "envíemelo al WhatsApp"
+  - "enviemelo al whatsapp"
+  - "quiero que me lo manden"
+  - "me lo puede mandar"
+  - "mándelo por WhatsApp"
+  - "mandelo por whatsapp"
+
+"INTERRUPCION":
+  - "espere"
+  - "un momento"
+  - "oiga"
+  - "disculpe"
+  - "pero"
+  - "déjeme hablar"
+  - "dejeme hablar"
+  - "pare"
+  - "alto"
+
+"PREGUNTA_DEUDA":
+  - "qué deuda"
+  - "que deuda"
+  - "de qué deuda"
+  - "de que deuda"
+  - "cuál deuda"
+  - "cual deuda"
+  - "qué me están cobrando"
+  - "que me estan cobrando"
+  - "de qué me habla"
+  - "de que me habla"
+  - "con qué banco"
+  - "con que banco"
+  - "qué banco"
+  - "que banco"
+  - "de qué deuda me habla"
+  - "de que deuda me habla"
+
+"CONFIRMA_PERSONA":
+  - "sí soy"
+  - "soy yo"
+  - "correcto"
+  - "dígame"
+  - "le escucho"
+  - "escucho"
+
+"ESTA_OCUPADO":
+  - "estoy ocupado"
+  - "ahora no puedo"
+  - "no puedo hablar"
+  - "estoy trabajando"
+  - "llame después"
+
+"ACEPTA_ACUERDO":
+  - "sí me interesa conversar"
+  - "si me interesa conversar"
+  - "acepto conversar"
+  - "sí quiero un acuerdo"
+  - "si quiero un acuerdo"
+  - "acepto el acuerdo"
+  - "me interesa el acuerdo"
+
+"RECHAZA_ACUERDO":
+  - "no me interesa conversar"
+  - "no quiero acuerdo"
+  - "rechazo el acuerdo"
+  - "no me interesa un acuerdo"
+
 "NO_ES_PERSONA":
   - "no soy esa persona"
   - "no lo conozco"

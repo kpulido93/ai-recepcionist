@@ -62,6 +62,7 @@ from vicidial_vosk_cobranza_ivr.lead_context import (  # noqa: E402
 LOGGER = logging.getLogger("vicidial_vosk_cobranza_ivr.lead_context")
 LEAD_CONTEXT_VARIABLES = {
     "IVR_CLIENT_NAME": "client_name",
+    "IVR_CLIENT_GENDER": "client_gender",
     "IVR_BANK_NAME": "bank_name",
     "IVR_PORTFOLIO_ID": "portfolio_id",
     "IVR_CAMPAIGN_ID": "campaign_id",
@@ -107,6 +108,7 @@ def run_load_lead_context(session: AgiSession, environment: dict[str, str]) -> i
             lead_id=None,
             phone_number=None,
             client_name=None,
+            client_gender=None,
             bank_name=None,
             portfolio_id=None,
             campaign_id=None,

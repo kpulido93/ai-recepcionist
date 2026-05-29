@@ -12,9 +12,9 @@ def write_csv(path: Path) -> None:
     path.write_text(
         "\n".join(
             [
-                "lead_id,phone_number,client_name,bank_name,portfolio_id,campaign_id,list_id",
-                "1001,809-555-0101,Ana Perez,Banco Uno,CARTERA_A,CAMP_A,LIST_A",
-                "1002,+1 (809) 555-0102,Luis Gomez,Banco Dos,CARTERA_B,CAMP_B,LIST_B",
+                "lead_id,phone_number,client_name,client_gender,bank_name,portfolio_id,campaign_id,list_id",
+                "1001,809-555-0101,Ana Perez,female,Banco Uno,CARTERA_A,CAMP_A,LIST_A",
+                "1002,+1 (809) 555-0102,Luis Gomez,male,Banco Dos,CARTERA_B,CAMP_B,LIST_B",
             ]
         ),
         encoding="utf-8",
@@ -33,6 +33,7 @@ def test_load_lead_context_from_csv_matches_lead_id_first(tmp_path: Path) -> Non
 
     assert context is not None
     assert context.client_name == "Luis Gomez"
+    assert context.client_gender == "male"
     assert context.bank_name == "Banco Dos"
     assert context.portfolio_id == "CARTERA_B"
 
@@ -45,6 +46,7 @@ def test_load_lead_context_from_csv_matches_phone_number(tmp_path: Path) -> None
 
     assert context is not None
     assert context.lead_id == "1002"
+    assert context.client_gender == "male"
     assert context.campaign_id == "CAMP_B"
     assert context.list_id == "LIST_B"
 

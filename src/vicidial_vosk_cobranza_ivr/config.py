@@ -50,6 +50,23 @@ DEFAULT_SEMANTIC_THRESHOLD = 0.72
 DEFAULT_SEMANTIC_MIN_CONFIDENCE = 0.70
 DEFAULT_SEMANTIC_INTENTS_PATH = "semantic_intents.yml"
 DEFAULT_INITIAL_TIMEOUT_SECONDS = 5.0
+DEFAULT_OBJECTION_PROBE_INITIAL_TIMEOUT_SECONDS = 1.8
+DEFAULT_OBJECTION_PROBE_MAX_LISTEN_SECONDS = 2
+DEFAULT_OBJECTION_PROBE_SILENCE_AFTER_SPEECH_MS = 550
+DEFAULT_OPTIMA_AUDIO_ENABLED = True
+DEFAULT_OPTIMA_AUDIO_PROVIDER = "elevenlabs"
+DEFAULT_OPTIMA_AUDIO_CACHE_ENABLED = True
+DEFAULT_OPTIMA_AUDIO_CACHE_DIR = "/var/lib/asterisk/sounds/custom/generated/optima"
+DEFAULT_OPTIMA_AUDIO_MIRROR_DIRS = ("/usr/share/asterisk/sounds/custom/generated/optima",)
+DEFAULT_OPTIMA_AUDIO_PLAYBACK_PREFIX = "custom/generated/optima"
+DEFAULT_OPTIMA_AUDIO_VERSION = "v1-optima-segmented"
+DEFAULT_OPTIMA_AUDIO_MAX_NAME_CHARS = 80
+DEFAULT_OPTIMA_AUDIO_MAX_BANK_CHARS = 120
+DEFAULT_OPTIMA_AUDIO_FALLBACK_ON_ERROR = True
+DEFAULT_OPTIMA_AUDIO_TEMPLATE_SALUDO_NOMBRE = "Saludos {name}."
+DEFAULT_OPTIMA_AUDIO_TEMPLATE_DEUDA_BANCO = "Por la deuda que mantiene en {bank}."
+DEFAULT_OPTIMA_AUDIO_FALLBACK_SALUDO_GENERICO = "custom/optima-01-saludo-generico"
+DEFAULT_OPTIMA_AUDIO_FALLBACK_DEUDA_GENERICA = "custom/optima-04-deuda-generica"
 
 
 class ConfigError(RuntimeError):
@@ -103,10 +120,46 @@ class ListenAttemptSettings:
     early_detection_min_audio_ms: int
 
 
+def _default_objection_probe_settings() -> ListenAttemptSettings:
+    return build_default_objection_probe_settings()
+
+
 @dataclass(frozen=True)
 class ListenProfilesSettings:
     first_attempt: ListenAttemptSettings
     retry_attempt: ListenAttemptSettings
+    objection_probe: ListenAttemptSettings = field(
+        default_factory=_default_objection_probe_settings
+    )
+
+
+@dataclass(frozen=True)
+class OptimaAudioTemplates:
+    saludo_nombre: str = DEFAULT_OPTIMA_AUDIO_TEMPLATE_SALUDO_NOMBRE
+    deuda_banco: str = DEFAULT_OPTIMA_AUDIO_TEMPLATE_DEUDA_BANCO
+
+
+@dataclass(frozen=True)
+class OptimaAudioFallbacks:
+    saludo_generico_audio: str = DEFAULT_OPTIMA_AUDIO_FALLBACK_SALUDO_GENERICO
+    deuda_generica_audio: str = DEFAULT_OPTIMA_AUDIO_FALLBACK_DEUDA_GENERICA
+
+
+@dataclass(frozen=True)
+class OptimaAudioSettings:
+    enabled: bool = DEFAULT_OPTIMA_AUDIO_ENABLED
+    provider: str = DEFAULT_OPTIMA_AUDIO_PROVIDER
+    cache_enabled: bool = DEFAULT_OPTIMA_AUDIO_CACHE_ENABLED
+    cache_dir: str = DEFAULT_OPTIMA_AUDIO_CACHE_DIR
+    mirror_dirs: tuple[str, ...] = DEFAULT_OPTIMA_AUDIO_MIRROR_DIRS
+    playback_prefix: str = DEFAULT_OPTIMA_AUDIO_PLAYBACK_PREFIX
+    version: str = DEFAULT_OPTIMA_AUDIO_VERSION
+    env_file: str | None = None
+    max_name_chars: int = DEFAULT_OPTIMA_AUDIO_MAX_NAME_CHARS
+    max_bank_chars: int = DEFAULT_OPTIMA_AUDIO_MAX_BANK_CHARS
+    fallback_on_error: bool = DEFAULT_OPTIMA_AUDIO_FALLBACK_ON_ERROR
+    templates: OptimaAudioTemplates = field(default_factory=OptimaAudioTemplates)
+    fallbacks: OptimaAudioFallbacks = field(default_factory=OptimaAudioFallbacks)
 
 
 @dataclass(frozen=True)
@@ -183,6 +236,7 @@ class AppConfig:
         default_factory=SemanticClassifierSettings
     )
     semantic_intents: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    optima_audio: OptimaAudioSettings = field(default_factory=OptimaAudioSettings)
 
 
 def resolve_runtime_paths(
@@ -363,6 +417,7 @@ def load_app_config(
             },
             semantic_classifier=semantic_settings,
             semantic_intents=semantic_intents,
+            optima_audio=_build_optima_audio_settings(raw_config),
         )
     except KeyError as exc:
         raise ConfigError(f"Falta la clave de configuracion: {exc}") from exc
@@ -488,6 +543,17 @@ def build_default_listen_profiles(
     return ListenProfilesSettings(
         first_attempt=base_attempt,
         retry_attempt=base_attempt,
+        objection_probe=build_default_objection_probe_settings(),
+    )
+
+
+def build_default_objection_probe_settings() -> ListenAttemptSettings:
+    return ListenAttemptSettings(
+        initial_timeout_seconds=DEFAULT_OBJECTION_PROBE_INITIAL_TIMEOUT_SECONDS,
+        max_listen_seconds=DEFAULT_OBJECTION_PROBE_MAX_LISTEN_SECONDS,
+        silence_after_speech_ms=DEFAULT_OBJECTION_PROBE_SILENCE_AFTER_SPEECH_MS,
+        min_speech_ms=DEFAULT_MIN_SPEECH_MS,
+        early_detection_min_audio_ms=DEFAULT_EARLY_DETECTION_MIN_AUDIO_MS,
     )
 
 
@@ -521,6 +587,10 @@ def _build_listen_profiles_settings(ivr_config: dict[str, Any]) -> ListenProfile
         retry_attempt=_build_listen_attempt_settings(
             raw_listen_config.get("retry_attempt", {}),
             defaults.retry_attempt,
+        ),
+        objection_probe=_build_listen_attempt_settings(
+            raw_listen_config.get("objection_probe", {}),
+            defaults.objection_probe,
         ),
     )
 
@@ -593,6 +663,75 @@ def _load_semantic_intents(
     return normalized_intents
 
 
+def _build_optima_audio_settings(config_data: dict[str, Any]) -> OptimaAudioSettings:
+    optima_audio_config = _get_optional_section(config_data, "optima_audio")
+    templates_config = _get_optional_mapping(optima_audio_config, "templates")
+    fallbacks_config = _get_optional_mapping(optima_audio_config, "fallbacks")
+    mirror_dirs = _string_tuple(
+        optima_audio_config.get("mirror_dirs"),
+        DEFAULT_OPTIMA_AUDIO_MIRROR_DIRS,
+    )
+    return OptimaAudioSettings(
+        enabled=bool(optima_audio_config.get("enabled", DEFAULT_OPTIMA_AUDIO_ENABLED)),
+        provider=str(optima_audio_config.get("provider", DEFAULT_OPTIMA_AUDIO_PROVIDER)).strip()
+        or DEFAULT_OPTIMA_AUDIO_PROVIDER,
+        cache_enabled=bool(
+            optima_audio_config.get("cache_enabled", DEFAULT_OPTIMA_AUDIO_CACHE_ENABLED)
+        ),
+        cache_dir=str(optima_audio_config.get("cache_dir", DEFAULT_OPTIMA_AUDIO_CACHE_DIR)).strip()
+        or DEFAULT_OPTIMA_AUDIO_CACHE_DIR,
+        mirror_dirs=mirror_dirs,
+        playback_prefix=str(
+            optima_audio_config.get("playback_prefix", DEFAULT_OPTIMA_AUDIO_PLAYBACK_PREFIX)
+        ).strip()
+        or DEFAULT_OPTIMA_AUDIO_PLAYBACK_PREFIX,
+        version=str(optima_audio_config.get("version", DEFAULT_OPTIMA_AUDIO_VERSION)).strip()
+        or DEFAULT_OPTIMA_AUDIO_VERSION,
+        env_file=_optional_string(optima_audio_config.get("env_file")),
+        max_name_chars=int(
+            optima_audio_config.get("max_name_chars", DEFAULT_OPTIMA_AUDIO_MAX_NAME_CHARS)
+        ),
+        max_bank_chars=int(
+            optima_audio_config.get("max_bank_chars", DEFAULT_OPTIMA_AUDIO_MAX_BANK_CHARS)
+        ),
+        fallback_on_error=bool(
+            optima_audio_config.get("fallback_on_error", DEFAULT_OPTIMA_AUDIO_FALLBACK_ON_ERROR)
+        ),
+        templates=OptimaAudioTemplates(
+            saludo_nombre=str(
+                templates_config.get(
+                    "saludo_nombre",
+                    DEFAULT_OPTIMA_AUDIO_TEMPLATE_SALUDO_NOMBRE,
+                )
+            ).strip()
+            or DEFAULT_OPTIMA_AUDIO_TEMPLATE_SALUDO_NOMBRE,
+            deuda_banco=str(
+                templates_config.get(
+                    "deuda_banco",
+                    DEFAULT_OPTIMA_AUDIO_TEMPLATE_DEUDA_BANCO,
+                )
+            ).strip()
+            or DEFAULT_OPTIMA_AUDIO_TEMPLATE_DEUDA_BANCO,
+        ),
+        fallbacks=OptimaAudioFallbacks(
+            saludo_generico_audio=str(
+                fallbacks_config.get(
+                    "saludo_generico_audio",
+                    DEFAULT_OPTIMA_AUDIO_FALLBACK_SALUDO_GENERICO,
+                )
+            ).strip()
+            or DEFAULT_OPTIMA_AUDIO_FALLBACK_SALUDO_GENERICO,
+            deuda_generica_audio=str(
+                fallbacks_config.get(
+                    "deuda_generica_audio",
+                    DEFAULT_OPTIMA_AUDIO_FALLBACK_DEUDA_GENERICA,
+                )
+            ).strip()
+            or DEFAULT_OPTIMA_AUDIO_FALLBACK_DEUDA_GENERICA,
+        ),
+    )
+
+
 def _resolve_semantic_intents_path(config_path: Path, intents_path: str) -> Path:
     raw_path = Path(intents_path).expanduser()
     if raw_path.is_absolute():
@@ -606,6 +745,28 @@ def _string_list(raw_values: object) -> list[str]:
     if not isinstance(raw_values, list):
         raise ConfigError("Las frases semanticas deben venir en una lista YAML.")
     return [str(value) for value in raw_values]
+
+
+def _get_optional_mapping(config_data: dict[str, Any], key: str) -> dict[str, Any]:
+    section = config_data.get(key, {})
+    if section is None:
+        return {}
+    if not isinstance(section, dict):
+        raise ConfigError(f"La seccion '{key}' debe ser un objeto YAML.")
+    return section
+
+
+def _string_tuple(raw_values: object, default_values: tuple[str, ...]) -> tuple[str, ...]:
+    if not isinstance(raw_values, list):
+        return default_values
+    return tuple(str(value).strip() for value in raw_values if str(value).strip()) or default_values
+
+
+def _optional_string(raw_value: object) -> str | None:
+    if raw_value is None:
+        return None
+    normalized_value = str(raw_value).strip()
+    return normalized_value or None
 
 
 def _resolve_debug_audio_dump_enabled(

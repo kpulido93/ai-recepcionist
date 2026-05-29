@@ -36,8 +36,9 @@ def write_csv(path: Path) -> None:
     path.write_text(
         "\n".join(
             [
-                "lead_id,phone_number,client_name,bank_name,portfolio_id,campaign_id,list_id",
-                "2001,8095550201,Maria Ruiz,Banco Tres,CARTERA_C,CAMP_C,LIST_C",
+                "lead_id,phone_number,client_name,client_gender,bank_name,portfolio_id,campaign_id,list_id",
+                "1001,1001,Kevin,male,Banco Popular,popular_mora_30,LAB-CAMP,LAB-LIST",
+                "2001,8095550201,Maria Ruiz,female,Banco Tres,CARTERA_C,CAMP_C,LIST_C",
             ]
         ),
         encoding="utf-8",
@@ -65,10 +66,40 @@ def test_load_lead_context_agi_sets_expected_variables(
     assert exit_code == 0
     assert session.variables == {
         "IVR_CLIENT_NAME": "Maria Ruiz",
+        "IVR_CLIENT_GENDER": "female",
         "IVR_BANK_NAME": "Banco Tres",
         "IVR_PORTFOLIO_ID": "CARTERA_C",
         "IVR_CAMPAIGN_ID": "CAMP_C",
         "IVR_LIST_ID": "LIST_C",
+    }
+
+
+def test_load_lead_context_agi_matches_by_callerid_when_phone_number_is_missing(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    csv_path = tmp_path / "leads.csv"
+    write_csv(csv_path)
+    monkeypatch.setenv("IVR_LEAD_CONTEXT_CSV", str(csv_path))
+    module = load_agi_module()
+    session = FakeAgiSession(
+        {
+            "GET VARIABLE IVR_LEAD_ID": "200 result=0",
+            "GET VARIABLE IVR_PHONE_NUMBER": "200 result=0",
+            "GET VARIABLE CALLERID(num)": "200 result=1 (1001)",
+        }
+    )
+
+    exit_code = module.run_load_lead_context(session=session, environment={})
+
+    assert exit_code == 0
+    assert session.variables == {
+        "IVR_CLIENT_NAME": "Kevin",
+        "IVR_CLIENT_GENDER": "male",
+        "IVR_BANK_NAME": "Banco Popular",
+        "IVR_PORTFOLIO_ID": "popular_mora_30",
+        "IVR_CAMPAIGN_ID": "LAB-CAMP",
+        "IVR_LIST_ID": "LAB-LIST",
     }
 
 
@@ -93,6 +124,7 @@ def test_load_lead_context_agi_sets_empty_variables_when_not_found(
     assert exit_code == 0
     assert session.variables == {
         "IVR_CLIENT_NAME": "",
+        "IVR_CLIENT_GENDER": "",
         "IVR_BANK_NAME": "",
         "IVR_PORTFOLIO_ID": "",
         "IVR_CAMPAIGN_ID": "",

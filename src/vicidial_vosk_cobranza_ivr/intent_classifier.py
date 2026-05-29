@@ -32,12 +32,20 @@ class Intent(str, Enum):
     NO_ES_PERSONA = "NO_ES_PERSONA"
     PROMESA_PAGO = "PROMESA_PAGO"
     CALLBACK = "CALLBACK"
+    CALLBACK_MANANA = "CALLBACK_MANANA"
     DUDA = "DUDA"
     SILENCIO = "SILENCIO"
     TRANSFER_REQUEST = "TRANSFER_REQUEST"
     YA_PAGO = "YA_PAGO"
     QUIERE_ACUERDO = "QUIERE_ACUERDO"
+    ACEPTA_ACUERDO = "ACEPTA_ACUERDO"
+    RECHAZA_ACUERDO = "RECHAZA_ACUERDO"
     INFO_DEUDA = "INFO_DEUDA"
+    WHATSAPP_INFO = "WHATSAPP_INFO"
+    INTERRUPCION = "INTERRUPCION"
+    PREGUNTA_DEUDA = "PREGUNTA_DEUDA"
+    CONFIRMA_PERSONA = "CONFIRMA_PERSONA"
+    ESTA_OCUPADO = "ESTA_OCUPADO"
     DISPUTA_DEUDA = "DISPUTA_DEUDA"
     NO_PUEDE_PAGAR = "NO_PUEDE_PAGAR"
     TERCERO = "TERCERO"
@@ -54,17 +62,25 @@ PRIORITIZED_INTENTS: tuple[Intent, ...] = (
     Intent.NO_ES_PERSONA,
     Intent.TERCERO,
     Intent.NO,
+    Intent.RECHAZA_ACUERDO,
+    Intent.CALLBACK_MANANA,
     Intent.CALLBACK,
+    Intent.ESTA_OCUPADO,
+    Intent.PREGUNTA_DEUDA,
+    Intent.WHATSAPP_INFO,
+    Intent.INTERRUPCION,
     Intent.FRAUDE_O_DESCONFIANZA,
     Intent.DISPUTA_DEUDA,
     Intent.NO_PUEDE_PAGAR,
     Intent.YA_PAGO,
+    Intent.ACEPTA_ACUERDO,
     Intent.QUIERE_ACUERDO,
     Intent.PROMESA_PAGO,
     Intent.INFO_DEUDA,
     Intent.INFO_COBRO,
     Intent.TRANSFER_REQUEST,
     Intent.SI,
+    Intent.CONFIRMA_PERSONA,
     Intent.DUDA,
 )
 SKIPPED_PRIORITY_INTENTS = {Intent.SILENCIO}
@@ -75,15 +91,21 @@ EARLY_DETECTION_ALLOWED_INTENTS: tuple[Intent, ...] = (
     Intent.NO_ES_PERSONA,
     Intent.TERCERO,
     Intent.NO,
+    Intent.RECHAZA_ACUERDO,
+    Intent.CALLBACK_MANANA,
     Intent.CALLBACK,
+    Intent.ESTA_OCUPADO,
+    Intent.WHATSAPP_INFO,
     Intent.FRAUDE_O_DESCONFIANZA,
     Intent.YA_PAGO,
+    Intent.ACEPTA_ACUERDO,
     Intent.QUIERE_ACUERDO,
     Intent.PROMESA_PAGO,
     Intent.INFO_DEUDA,
     Intent.INFO_COBRO,
     Intent.TRANSFER_REQUEST,
     Intent.SI,
+    Intent.CONFIRMA_PERSONA,
 )
 DEFAULT_EARLY_INTENTS_CONFIG: dict[str, tuple[str, ...]] = {
     "SI": (
@@ -113,13 +135,41 @@ DEFAULT_EARLY_INTENTS_CONFIG: dict[str, tuple[str, ...]] = {
         "voy a pagar",
         "puedo pagar hoy",
     ),
+    "ACEPTA_ACUERDO": (
+        "si quiero un acuerdo",
+        "acepto el acuerdo",
+        "me interesa el acuerdo",
+    ),
     "QUIERE_ACUERDO": (
         "quiero hacer un acuerdo",
         "quiero llegar a un acuerdo",
     ),
+    "WHATSAPP_INFO": (
+        "envieme por whatsapp",
+        "mandeme la informacion",
+        "por whatsapp",
+    ),
     "YA_PAGO": (
         "ya pague",
         "ya realice el pago",
+    ),
+    "CONFIRMA_PERSONA": (
+        "si soy",
+        "soy yo",
+        "digame",
+        "le escucho",
+    ),
+    "ESTA_OCUPADO": (
+        "ahora no puedo",
+        "no puedo hablar",
+        "estoy trabajando",
+        "llame despues",
+    ),
+    "CALLBACK_MANANA": (
+        "manana",
+        "llameme manana",
+        "mejor manana",
+        "hablemos manana",
     ),
     "NO": (
         "no",
@@ -127,6 +177,11 @@ DEFAULT_EARLY_INTENTS_CONFIG: dict[str, tuple[str, ...]] = {
         "no me transfiera",
         "no me comuniquen",
         "no llamen mas",
+    ),
+    "RECHAZA_ACUERDO": (
+        "no me interesa un acuerdo",
+        "no quiero acuerdo",
+        "rechazo el acuerdo",
     ),
     "NUMERO_EQUIVOCADO": (
         "numero equivocado",
@@ -164,6 +219,10 @@ CRITICAL_BLOCKING_INTENTS: tuple[Intent, ...] = (
     Intent.NO_ES_PERSONA,
     Intent.TERCERO,
 )
+CLIENT_FLOW_9912_STAGES = frozenset(
+    {"greeting_check", "agreement_offer", "callback_offer", "whatsapp_offer"}
+)
+CLIENT_FLOW_STAGE_ONLY_INTENTS = frozenset({Intent.INTERRUPCION, Intent.PREGUNTA_DEUDA})
 
 
 @dataclass(frozen=True)
@@ -253,6 +312,7 @@ class IntentClassifier:
         self,
         transcript: str | None = None,
         dtmf: str | None = None,
+        flow_stage: str | None = None,
     ) -> IntentClassification:
         dtmf_classification = self.classify_dtmf(dtmf)
         if dtmf_classification is not None:
@@ -263,16 +323,20 @@ class IntentClassifier:
         if blocklist_classification is not None:
             return blocklist_classification
 
+        effective_phrases = self._resolve_effective_intents_config(flow_stage)
         result = classify_intent(
             original_transcript,
             intents_config={
-                intent_value(intent): phrase_list for intent, phrase_list in self.phrases.items()
+                intent_value(intent): phrase_list
+                for intent, phrase_list in effective_phrases.items()
             },
             default_intent=self.default_intent,
         )
         fuzzy_classification = self._classify_fuzzy(
             transcript=original_transcript,
             exact_result=result,
+            phrases=effective_phrases,
+            semantic_phrases=self._resolve_effective_semantic_intents_config(flow_stage),
         )
         if fuzzy_classification is not None:
             return fuzzy_classification
@@ -303,14 +367,15 @@ class IntentClassifier:
         )
 
     def detect_early_intent(self, partial: str) -> EarlyIntentMatch | None:
+        effective_phrases = self._resolve_effective_intents_config(None)
         return detect_early_intent(
             partial,
             intents_config={
-                intent_value(intent): phrases for intent, phrases in self.phrases.items()
+                intent_value(intent): phrases for intent, phrases in effective_phrases.items()
             },
             supported_intents={
                 intent_value(intent)
-                for intent in self.phrases
+                for intent in effective_phrases
                 if intent not in SKIPPED_PRIORITY_INTENTS
             },
             blocklist_matcher=self.blocklist_matcher,
@@ -348,6 +413,8 @@ class IntentClassifier:
         *,
         transcript: str,
         exact_result: ClassifiedIntent,
+        phrases: Mapping[IntentName, Sequence[str]],
+        semantic_phrases: Mapping[IntentName, Sequence[str]],
     ) -> IntentClassification | None:
         if not self.semantic_config.enabled or not self.semantic_config.fuzzy_enabled:
             return None
@@ -361,7 +428,10 @@ class IntentClassifier:
         if not normalized_text:
             return None
 
-        normalized_intents = self._build_fuzzy_intents_config()
+        normalized_intents = self._build_fuzzy_intents_config(
+            phrases=phrases,
+            semantic_phrases=semantic_phrases,
+        )
         if not normalized_intents:
             return None
 
@@ -394,17 +464,46 @@ class IntentClassifier:
             confidence=selected_match.score,
         )
 
-    def _build_fuzzy_intents_config(self) -> dict[IntentName, list[str]]:
+    def _build_fuzzy_intents_config(
+        self,
+        *,
+        phrases: Mapping[IntentName, Sequence[str]],
+        semantic_phrases: Mapping[IntentName, Sequence[str]],
+    ) -> dict[IntentName, list[str]]:
         intents: dict[IntentName, list[str]] = {
-            intent: list(phrases) for intent, phrases in self.phrases.items()
+            intent: list(phrase_list) for intent, phrase_list in phrases.items()
         }
 
-        for intent, phrase_groups in self.semantic_phrases.items():
+        for intent, phrase_groups in semantic_phrases.items():
             intent_phrases = intents.setdefault(intent, [])
             intent_phrases.extend(phrase_groups)
             intents[intent] = list(dict.fromkeys(intent_phrases))
 
         return intents
+
+    def _resolve_effective_intents_config(
+        self,
+        flow_stage: str | None,
+    ) -> dict[IntentName, list[str]]:
+        if _should_enable_client_flow_stage_intents(flow_stage):
+            return {intent: list(phrases) for intent, phrases in self.phrases.items()}
+        return {
+            intent: list(phrases)
+            for intent, phrases in self.phrases.items()
+            if not _is_client_flow_stage_only_intent(intent)
+        }
+
+    def _resolve_effective_semantic_intents_config(
+        self,
+        flow_stage: str | None,
+    ) -> dict[IntentName, list[str]]:
+        if _should_enable_client_flow_stage_intents(flow_stage):
+            return {intent: list(phrases) for intent, phrases in self.semantic_phrases.items()}
+        return {
+            intent: list(phrases)
+            for intent, phrases in self.semantic_phrases.items()
+            if not _is_client_flow_stage_only_intent(intent)
+        }
 
 
 def load_intents(path: Path) -> dict[str, list[str]]:
@@ -640,6 +739,15 @@ def _coerce_float(value: object) -> float:
     if isinstance(value, (float, int)):
         return float(value)
     return float(str(value))
+
+
+def _should_enable_client_flow_stage_intents(flow_stage: str | None) -> bool:
+    normalized_flow_stage = str(flow_stage or "").strip().lower()
+    return normalized_flow_stage in CLIENT_FLOW_9912_STAGES
+
+
+def _is_client_flow_stage_only_intent(intent_name: IntentName) -> bool:
+    return resolve_intent_name(intent_name) in CLIENT_FLOW_STAGE_ONLY_INTENTS
 
 
 def _build_priority_order(

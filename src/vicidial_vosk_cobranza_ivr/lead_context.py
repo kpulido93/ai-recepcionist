@@ -15,6 +15,7 @@ class LeadContext:
     lead_id: str | None
     phone_number: str | None
     client_name: str | None
+    client_gender: str | None
     bank_name: str | None
     portfolio_id: str | None
     campaign_id: str | None
@@ -39,6 +40,7 @@ def load_lead_context_from_mapping(data: dict[str, str]) -> LeadContext:
         lead_id=sanitize_lead_value(data.get("lead_id")),
         phone_number=sanitize_lead_value(data.get("phone_number")),
         client_name=sanitize_lead_value(data.get("client_name")),
+        client_gender=sanitize_lead_value(data.get("client_gender")),
         bank_name=sanitize_lead_value(data.get("bank_name")),
         portfolio_id=sanitize_lead_value(data.get("portfolio_id")),
         campaign_id=sanitize_lead_value(data.get("campaign_id")),

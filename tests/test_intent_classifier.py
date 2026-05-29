@@ -55,10 +55,43 @@ def build_intents_config() -> dict[str, list[str]]:
         ],
         "PROMESA_PAGO": ["quiero pagar", "voy a pagar"],
         "QUIERE_ACUERDO": ["quiero hacer un acuerdo", "quiero llegar a un acuerdo"],
+        "ACEPTA_ACUERDO": ["acepto el acuerdo", "me interesa el acuerdo"],
+        "RECHAZA_ACUERDO": ["rechazo el acuerdo", "no quiero acuerdo"],
         "YA_PAGO": ["ya pague", "ya realice el pago"],
+        "WHATSAPP_INFO": [
+            "envieme por whatsapp",
+            "mandeme la informacion",
+            "por whatsapp",
+            "quiero que me lo manden",
+            "me lo puede mandar",
+            "mandelo por whatsapp",
+        ],
+        "INTERRUPCION": [
+            "espere",
+            "un momento",
+            "oiga",
+            "disculpe",
+            "pero",
+            "dejeme hablar",
+            "pare",
+            "alto",
+        ],
+        "PREGUNTA_DEUDA": [
+            "que deuda",
+            "de que deuda",
+            "cual deuda",
+            "que me estan cobrando",
+            "de que me habla",
+            "con que banco",
+            "que banco",
+            "de que deuda me habla",
+        ],
+        "CONFIRMA_PERSONA": ["si soy", "soy yo", "digame", "le escucho", "escucho"],
         "DISPUTA_DEUDA": ["no reconozco esa deuda"],
         "NO_PUEDE_PAGAR": ["no puedo pagar"],
         "CALLBACK": ["llameme despues", "estoy ocupado"],
+        "CALLBACK_MANANA": ["llameme manana", "manana me puede llamar", "mejor manana"],
+        "ESTA_OCUPADO": ["ahora no puedo", "no puedo hablar", "llame despues"],
         "NUMERO_EQUIVOCADO": ["numero equivocado", "este no es su numero"],
         "NO_ES_PERSONA": ["no soy esa persona", "no la conozco"],
         "TERCERO": ["soy familiar", "soy tercero"],
@@ -115,6 +148,106 @@ def build_semantic_intents_config() -> dict[str, dict[str, list[str]]]:
                 "quiero hablar con cartera",
                 "me comunica con cartera",
                 "comuniqueme con cartera",
+            ],
+        },
+        "CALLBACK_MANANA": {
+            "canonical": [
+                "llameme manana",
+                "manana me puede llamar",
+            ],
+            "aliases": [
+                "mañana",
+                "llámeme mañana",
+                "mejor mañana",
+                "hablemos mañana",
+            ],
+        },
+        "WHATSAPP_INFO": {
+            "canonical": [
+                "envieme por whatsapp",
+                "mandeme la informacion",
+            ],
+            "aliases": [
+                "envíeme por WhatsApp",
+                "mándeme la información",
+                "por WhatsApp",
+                "al WhatsApp",
+                "envíemelo al WhatsApp",
+                "quiero que me lo manden",
+                "me lo puede mandar",
+                "mándelo por WhatsApp",
+                "mandelo por whatsapp",
+            ],
+        },
+        "INTERRUPCION": {
+            "canonical": [
+                "espere",
+                "dejeme hablar",
+            ],
+            "aliases": [
+                "un momento",
+                "oiga",
+                "disculpe",
+                "pero",
+                "pare",
+                "alto",
+            ],
+        },
+        "PREGUNTA_DEUDA": {
+            "canonical": [
+                "que deuda",
+                "de que deuda",
+            ],
+            "aliases": [
+                "cual deuda",
+                "que me estan cobrando",
+                "de que me habla",
+                "con que banco",
+                "que banco",
+                "de que deuda me habla",
+            ],
+        },
+        "CONFIRMA_PERSONA": {
+            "canonical": [
+                "si soy",
+                "soy yo",
+            ],
+            "aliases": [
+                "digame",
+                "le escucho",
+                "escucho",
+            ],
+        },
+        "ESTA_OCUPADO": {
+            "canonical": [
+                "ahora no puedo",
+                "no puedo hablar",
+            ],
+            "aliases": [
+                "estoy ocupado",
+                "estoy trabajando",
+                "llame despues",
+            ],
+        },
+        "ACEPTA_ACUERDO": {
+            "canonical": [
+                "acepto el acuerdo",
+                "me interesa el acuerdo",
+            ],
+            "aliases": [
+                "si quiero un acuerdo",
+                "si me interesa conversar",
+                "acepto conversar",
+            ],
+        },
+        "RECHAZA_ACUERDO": {
+            "canonical": [
+                "rechazo el acuerdo",
+                "no quiero acuerdo",
+            ],
+            "aliases": [
+                "no me interesa un acuerdo",
+                "no me interesa conversar",
             ],
         },
         "NO": {
@@ -272,6 +405,64 @@ def test_classifies_cobranza_management_intents(
 @pytest.mark.parametrize(
     ("transcript", "expected_intent"),
     [
+        ("llámeme mañana", Intent.CALLBACK_MANANA),
+        ("envíeme por WhatsApp", Intent.WHATSAPP_INFO),
+        ("mándeme la información", Intent.WHATSAPP_INFO),
+        ("por WhatsApp", Intent.WHATSAPP_INFO),
+        ("quiero que me lo manden", Intent.WHATSAPP_INFO),
+        ("me lo puede mandar", Intent.WHATSAPP_INFO),
+        ("mándelo por WhatsApp", Intent.WHATSAPP_INFO),
+        ("soy yo", Intent.CONFIRMA_PERSONA),
+        ("ahora no puedo", Intent.ESTA_OCUPADO),
+        ("acepto el acuerdo", Intent.ACEPTA_ACUERDO),
+        ("rechazo el acuerdo", Intent.RECHAZA_ACUERDO),
+    ],
+)
+def test_classifies_client_flow_stage_intents(
+    transcript: str,
+    expected_intent: Intent,
+) -> None:
+    result = build_classifier().classify(transcript=transcript)
+
+    assert result.intent is expected_intent
+    assert result.source in {"transcript", "fuzzy"}
+
+
+@pytest.mark.parametrize(
+    ("transcript", "expected_intent"),
+    [
+        ("espere", Intent.INTERRUPCION),
+        ("déjeme hablar", Intent.INTERRUPCION),
+        ("qué deuda", Intent.PREGUNTA_DEUDA),
+        ("de qué deuda me habla", Intent.PREGUNTA_DEUDA),
+    ],
+)
+def test_classifies_client_flow_stage_only_intents_when_stage_is_9912(
+    transcript: str,
+    expected_intent: Intent,
+) -> None:
+    result = build_classifier().classify(
+        transcript=transcript,
+        flow_stage="agreement_offer",
+    )
+
+    assert result.intent is expected_intent
+    assert result.source in {"transcript", "fuzzy"}
+
+
+@pytest.mark.parametrize("transcript", ["espere", "qué deuda", "de qué deuda me habla"])
+def test_does_not_leak_client_flow_stage_only_intents_without_9912_stage(
+    transcript: str,
+) -> None:
+    result = build_classifier().classify(transcript=transcript)
+
+    assert result.intent is Intent.DUDA
+    assert result.source == "default"
+
+
+@pytest.mark.parametrize(
+    ("transcript", "expected_intent"),
+    [
         ("no", Intent.NO),
         ("no quiero", Intent.NO),
         ("no me comuniquen", Intent.NO),
@@ -317,6 +508,7 @@ def test_unknown_text_keeps_default_duda_confidence() -> None:
     [
         ("__ABUSIVE_TOKEN__ sí", Intent.VULGARIDAD),
         ("__ABUSIVE_TOKEN__ comuníqueme", Intent.VULGARIDAD),
+        ("__ABUSIVE_TOKEN__ envíeme por WhatsApp", Intent.VULGARIDAD),
         ("__THREAT_TOKEN__ quiero hablar", Intent.AMENAZA_VERBAL),
     ],
 )
@@ -382,12 +574,19 @@ def test_load_intents_keeps_yaml_keys_as_strings() -> None:
         ("me pasan con cartera", Intent.TRANSFER_REQUEST),
         ("quiero pagar", Intent.PROMESA_PAGO),
         ("quiero hacer un acuerdo", Intent.QUIERE_ACUERDO),
+        ("acepto el acuerdo", Intent.ACEPTA_ACUERDO),
         ("ya pague", Intent.YA_PAGO),
         ("quiero saber cuanto es la deuda", Intent.INFO_DEUDA),
+        ("envíeme por WhatsApp", Intent.WHATSAPP_INFO),
+        ("mándeme la información", Intent.WHATSAPP_INFO),
+        ("por WhatsApp", Intent.WHATSAPP_INFO),
         ("no me comuniquen", Intent.NO),
+        ("rechazo el acuerdo", Intent.RECHAZA_ACUERDO),
         ("no me pasen con cartera", Intent.NO),
+        ("llámeme mañana", Intent.CALLBACK_MANANA),
         ("numero equivocado", Intent.NUMERO_EQUIVOCADO),
         ("soy familiar", Intent.TERCERO),
+        ("soy yo", Intent.CONFIRMA_PERSONA),
         ("esto es fraude", Intent.FRAUDE_O_DESCONFIANZA),
     ],
 )
@@ -410,6 +609,34 @@ def test_classifies_phrases_from_repo_yaml(
 
 
 @pytest.mark.parametrize(
+    ("transcript", "flow_stage", "expected_intent"),
+    [
+        ("espere", "greeting_check", Intent.INTERRUPCION),
+        ("déjeme hablar", "callback_offer", Intent.INTERRUPCION),
+        ("qué deuda", "greeting_check", Intent.PREGUNTA_DEUDA),
+        ("de qué deuda me habla", "agreement_offer", Intent.PREGUNTA_DEUDA),
+    ],
+)
+def test_classifies_stage_only_phrases_from_repo_yaml_when_stage_matches(
+    transcript: str,
+    flow_stage: str,
+    expected_intent: Intent,
+) -> None:
+    intents = load_intents(Path("config/intents.yml"))
+    classifier = IntentClassifier(
+        phrases=intents,
+        default_intent="DUDA",
+        dtmf_map={},
+        semantic_config=build_semantic_classifier_config(),
+        semantic_intents=build_semantic_intents_config(),
+    )
+
+    result = classifier.classify(transcript=transcript, flow_stage=flow_stage)
+
+    assert result.intent is expected_intent
+
+
+@pytest.mark.parametrize(
     ("partial", "expected_intent"),
     [
         ("si", Intent.SI),
@@ -419,9 +646,14 @@ def test_classifies_phrases_from_repo_yaml(
         ("quiero saber cuanto es la deuda", Intent.INFO_DEUDA),
         ("quiero pagar", Intent.PROMESA_PAGO),
         ("quiero hacer un acuerdo", Intent.QUIERE_ACUERDO),
+        ("acepto el acuerdo", Intent.ACEPTA_ACUERDO),
         ("ya pague", Intent.YA_PAGO),
         ("no me transfiera", Intent.NO),
         ("no me pasen con cartera", Intent.NO),
+        ("llameme manana", Intent.CALLBACK_MANANA),
+        ("envieme por whatsapp", Intent.WHATSAPP_INFO),
+        ("mandeme la informacion", Intent.WHATSAPP_INFO),
+        ("por whatsapp", Intent.WHATSAPP_INFO),
         ("numero equivocado", Intent.NUMERO_EQUIVOCADO),
     ],
 )
@@ -453,3 +685,7 @@ def test_detects_early_blocklist_before_transfer() -> None:
 
 def test_does_not_detect_early_intent_on_substring_false_positive() -> None:
     assert detect_early_intent("silla", intents_config=build_intents_config()) is None
+
+
+def test_early_detection_excludes_stage_only_intents_without_stage_context() -> None:
+    assert detect_early_intent("que deuda", intents_config=build_intents_config()) is None

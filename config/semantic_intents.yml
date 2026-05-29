@@ -80,6 +80,104 @@
     - "más tarde"
     - "en otro momento"
 
+"CALLBACK_MANANA":
+  canonical:
+    - "llameme manana"
+    - "manana me puede llamar"
+  aliases:
+    - "mañana"
+    - "llámeme mañana"
+    - "mejor mañana"
+    - "hablemos mañana"
+
+"WHATSAPP_INFO":
+  canonical:
+    - "envieme por whatsapp"
+    - "mandeme la informacion"
+  aliases:
+    - "envíeme por WhatsApp"
+    - "mándeme la información"
+    - "por WhatsApp"
+    - "al WhatsApp"
+    - "envíemelo al WhatsApp"
+    - "enviemelo al whatsapp"
+    - "quiero que me lo manden"
+    - "me lo puede mandar"
+    - "mándelo por WhatsApp"
+    - "mandelo por whatsapp"
+
+"INTERRUPCION":
+  canonical:
+    - "espere"
+    - "dejeme hablar"
+  aliases:
+    - "un momento"
+    - "oiga"
+    - "disculpe"
+    - "pero"
+    - "déjeme hablar"
+    - "pare"
+    - "alto"
+
+"PREGUNTA_DEUDA":
+  canonical:
+    - "que deuda"
+    - "de que deuda"
+  aliases:
+    - "qué deuda"
+    - "de qué deuda"
+    - "cual deuda"
+    - "cuál deuda"
+    - "que me estan cobrando"
+    - "qué me están cobrando"
+    - "de que me habla"
+    - "de qué me habla"
+    - "con que banco"
+    - "con qué banco"
+    - "que banco"
+    - "qué banco"
+    - "de que deuda me habla"
+    - "de qué deuda me habla"
+
+"CONFIRMA_PERSONA":
+  canonical:
+    - "si soy"
+    - "soy yo"
+  aliases:
+    - "dígame"
+    - "digame"
+    - "le escucho"
+    - "escucho"
+
+"ESTA_OCUPADO":
+  canonical:
+    - "ahora no puedo"
+    - "no puedo hablar"
+  aliases:
+    - "estoy ocupado"
+    - "estoy trabajando"
+    - "llame después"
+    - "llame despues"
+
+"ACEPTA_ACUERDO":
+  canonical:
+    - "acepto el acuerdo"
+    - "me interesa el acuerdo"
+  aliases:
+    - "sí quiero un acuerdo"
+    - "si quiero un acuerdo"
+    - "sí me interesa conversar"
+    - "si me interesa conversar"
+    - "acepto conversar"
+
+"RECHAZA_ACUERDO":
+  canonical:
+    - "no quiero acuerdo"
+    - "rechazo el acuerdo"
+  aliases:
+    - "no me interesa un acuerdo"
+    - "no me interesa conversar"
+
 "NUMERO_EQUIVOCADO":
   canonical:
     - "numero equivocado"

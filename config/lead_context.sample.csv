@@ -1,5 +1,5 @@
-lead_id,phone_number,client_name,bank_name,portfolio_id,campaign_id,list_id
-lab-popular,1001,Juan Perez,Banco Popular,popular_mora_30,LAB-CAMP,LAB-LIST
-lab-bhd,1001,Maria Gomez,Banco BHD,bhd_mora_60,LAB-CAMP,LAB-LIST
-lab-reservas,1001,Carlos Diaz,Banco Reservas,reservas_mora_90,LAB-CAMP,LAB-LIST
-lab-demo,8095550101,Cliente Demo,Banco Demo,CARTERA_DEMO,CAMPANA_DEMO,LISTA_DEMO
+lead_id,phone_number,client_name,client_gender,bank_name,portfolio_id,campaign_id,list_id
+lab-1001,1001,Kevin,male,Banco Popular,popular_mora_30,LAB-CAMP,LAB-LIST
+lab-1003,1003,María,female,Banco BHD,bhd_mora_60,LAB-CAMP,LAB-LIST
+lab-1004,1004,Carlos,unknown,Banco Reservas,reservas_mora_90,LAB-CAMP,LAB-LIST
+lab-demo,8095550101,Cliente Demo,unknown,Banco Demo,CARTERA_DEMO,CAMPANA_DEMO,LISTA_DEMO

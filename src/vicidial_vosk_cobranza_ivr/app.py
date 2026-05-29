@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import re
 import sys
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -17,6 +19,7 @@ from vicidial_vosk_cobranza_ivr.blocklist import BlocklistMatcher
 from vicidial_vosk_cobranza_ivr.config import (
     AppConfig,
     ListenAttemptSettings,
+    RuntimePaths,
     load_app_config,
     resolve_runtime_paths,
 )
@@ -41,6 +44,14 @@ from vicidial_vosk_cobranza_ivr.vosk_client import VoskClient
 
 SAFE_AGI_VALUE_LENGTH = 2048
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9_-]+")
+VALID_LISTEN_PROFILE_NAMES = frozenset({"first_attempt", "retry_attempt", "objection_probe"})
+
+
+@dataclass(frozen=True)
+class RetryContext:
+    retry_count: int
+    try_value: int
+    vosk_try_value: int
 
 
 def build_service(
@@ -95,11 +106,7 @@ def run_eagi() -> int:
 
     try:
         runtime_paths = resolve_runtime_paths()
-        config = load_app_config(
-            runtime_paths.config_path,
-            runtime_paths.intents_path,
-            runtime_paths.logging_path,
-        )
+        config = _load_runtime_app_config(runtime_paths, fallback_logger)
         logger = configure_logging(config.logging, runtime_paths.logging_path)
         _redirect_console_logging_to_stderr(logger)
         service = build_service(config=config, logger=logger)
@@ -138,13 +145,21 @@ def run_eagi_session(
     attempts = _resolve_attempts(call_environment)
     masked_channel = _mask_log_value(channel, config.logging.mask_phone_numbers)
     masked_caller = _mask_log_value(caller, config.logging.mask_phone_numbers)
-    retry_count = _resolve_retry_count(session, call_environment, logger)
+    retry_context = _resolve_retry_context(session, call_environment, logger)
+    flow_stage = _resolve_flow_stage(session, call_environment, logger)
+    requested_listen_profile = _resolve_listen_profile_name(session, call_environment, logger)
     logger.info(
-        "Inicio EAGI uniqueid=%s channel=%s caller=%s try=%s",
+        (
+            "Inicio EAGI uniqueid=%s channel=%s caller=%s TRY=%s VOSK_TRY=%s "
+            "flow_stage=%s listen_profile=%s"
+        ),
         uniqueid,
         masked_channel,
         masked_caller,
-        retry_count,
+        retry_context.try_value,
+        retry_context.vosk_try_value,
+        flow_stage or "",
+        requested_listen_profile or "",
     )
 
     try:
@@ -157,14 +172,16 @@ def run_eagi_session(
                 b"",
                 config.ivr.sample_rate,
                 dtmf=dtmf,
-                retry_count=retry_count,
+                retry_count=retry_context.retry_count,
+                flow_stage=flow_stage,
             )
             capture_finish_reason = "dtmf"
         else:
             capture_result = _capture_audio_result(
                 capture_audio=capture_audio,
                 config=config,
-                retry_count=retry_count,
+                retry_count=retry_context.retry_count,
+                requested_profile_name=requested_listen_profile,
             )
             logger.debug(
                 (
@@ -189,7 +206,8 @@ def run_eagi_session(
             outcome = service.classify_audio_bytes(
                 audio_bytes=capture_result.audio_bytes,
                 sample_rate=config.ivr.sample_rate,
-                retry_count=retry_count,
+                retry_count=retry_context.retry_count,
+                flow_stage=flow_stage,
             )
             capture_finish_reason = capture_result.finish_reason
 
@@ -199,11 +217,16 @@ def run_eagi_session(
         _log_listen_diagnostics(
             logger=logger,
             config=config,
-            retry_count=retry_count,
+            retry_count=retry_context.retry_count,
+            try_value=retry_context.try_value,
+            vosk_try_value=retry_context.vosk_try_value,
+            flow_stage=flow_stage,
             capture_result=capture_result,
             finish_reason=finish_reason,
             transcript=transcript,
             raw_messages=outcome.raw_messages,
+            source=outcome.source,
+            error_reason=outcome.reason if outcome.source == "error" else None,
         )
         write_ok = _write_agi_result(
             session=session,
@@ -284,7 +307,12 @@ def run_eagi_session(
             )
         return 1
     except Exception:
-        logger.exception("Error durante la ejecucion EAGI")
+        logger.exception(
+            "Error durante la ejecucion EAGI stage=%s TRY=%s VOSK_TRY=%s",
+            flow_stage or "",
+            retry_context.try_value,
+            retry_context.vosk_try_value,
+        )
         _safe_write_error_result(
             session,
             config.asterisk.channel_variable_name,
@@ -312,13 +340,79 @@ def sanitize_channel_value(value: str) -> str:
     return compact[:SAFE_AGI_VALUE_LENGTH]
 
 
+def _load_runtime_app_config(
+    runtime_paths: RuntimePaths,
+    fallback_logger: logging.Logger,
+) -> AppConfig:
+    try:
+        signature = inspect.signature(load_app_config)
+    except (TypeError, ValueError):
+        signature = None
+
+    if signature is None or "logging_config_path" in signature.parameters:
+        try:
+            return load_app_config(
+                runtime_paths.config_path,
+                runtime_paths.intents_path,
+                runtime_paths.logging_path,
+            )
+        except TypeError as exc:
+            fallback_logger.warning(
+                "load_app_config incompatible con logging_path; reintentando sin ese argumento: %s",
+                exc,
+            )
+
+    if signature is not None and "logging_config_path" not in signature.parameters:
+        fallback_logger.warning(
+            "load_app_config sin soporte logging_path detectado; usando compatibilidad temporal."
+        )
+
+    return load_app_config(runtime_paths.config_path, runtime_paths.intents_path)
+
+
+def _resolve_flow_stage(
+    session: AgiSession,
+    call_environment: Mapping[str, str],
+    logger: logging.Logger,
+) -> str | None:
+    for variable_name in ("agi_arg_3", "agi_arg_4"):
+        flow_stage = call_environment.get(variable_name, "").strip()
+        if flow_stage:
+            return flow_stage
+
+    for variable_name in ("VOSK_FLOW_STAGE", "vosk_flow_stage"):
+        flow_stage = call_environment.get(variable_name, "").strip()
+        if flow_stage:
+            return flow_stage
+
+    session_get_variable = getattr(session, "get_variable", None)
+    if not callable(session_get_variable):
+        return None
+
+    try:
+        resolved_value = session_get_variable("VOSK_FLOW_STAGE")
+    except AgiIoError as exc:
+        logger.debug("No fue posible leer VOSK_FLOW_STAGE desde AGI: %s", exc)
+        return None
+
+    if resolved_value is None:
+        return None
+    normalized_value = resolved_value.strip()
+    return normalized_value or None
+
+
 def _capture_audio_result(
     *,
     capture_audio: Callable[[int, int, int], bytes | CaptureResult] | None,
     config: AppConfig,
     retry_count: int,
+    requested_profile_name: str | None,
 ) -> CaptureResult:
-    active_listen_profile = _resolve_listen_attempt_settings(config=config, retry_count=retry_count)
+    active_listen_profile = _resolve_listen_attempt_settings(
+        config=config,
+        retry_count=retry_count,
+        requested_profile_name=requested_profile_name,
+    )
     if capture_audio is None:
         return capture_eagi_audio_result(
             fd=3,
@@ -663,41 +757,95 @@ def _safe_filename_fragment(value: str) -> str:
     return collapsed.strip("_")
 
 
-def _resolve_retry_count(
+def _resolve_retry_context(
     session: AgiSession,
     environment: dict[str, str],
     logger: logging.Logger,
+) -> RetryContext:
+    try_value = _resolve_counter_value(
+        session=session,
+        environment=environment,
+        variable_name="TRY",
+        logger=logger,
+    )
+    vosk_try_value = _resolve_counter_value(
+        session=session,
+        environment=environment,
+        variable_name="VOSK_TRY",
+        logger=logger,
+    )
+    retry_count = _parse_retry_count_from_mapping(environment, logger)
+    if retry_count is None:
+        for variable_name in ("TRY", "VOSK_TRY", "IVR_RETRY_COUNT"):
+            variable_value = _read_channel_variable(session, variable_name, logger)
+            retry_count = _parse_retry_count_candidate(variable_value, variable_name, logger)
+            if retry_count is not None:
+                break
+
+    return RetryContext(
+        retry_count=0 if retry_count is None else retry_count,
+        try_value=try_value,
+        vosk_try_value=vosk_try_value,
+    )
+
+
+def _resolve_counter_value(
+    *,
+    session: AgiSession,
+    environment: dict[str, str],
+    variable_name: str,
+    logger: logging.Logger,
 ) -> int:
-    retry_count = _parse_retry_count_from_mapping(environment)
-    if retry_count is not None:
-        return retry_count
+    if variable_name in environment:
+        return _normalize_counter_value(environment.get(variable_name), variable_name, logger)
 
-    for variable_name in ("TRY", "VOSK_TRY", "IVR_RETRY_COUNT"):
-        variable_value = _read_channel_variable(session, variable_name, logger)
-        if variable_value is None:
-            continue
-        try:
-            return max(0, int(variable_value))
-        except ValueError:
-            logger.debug(
-                "Variable de reintento invalida variable=%s value=%s",
-                variable_name,
-                variable_value,
-            )
-
-    return 0
+    variable_value = _read_channel_variable(session, variable_name, logger)
+    return _normalize_counter_value(variable_value, variable_name, logger)
 
 
-def _parse_retry_count_from_mapping(environment: dict[str, str]) -> int | None:
+def _parse_retry_count_from_mapping(
+    environment: dict[str, str],
+    logger: logging.Logger,
+) -> int | None:
     for key in ("TRY", "VOSK_TRY", "IVR_RETRY_COUNT", "agi_arg_2"):
-        raw_value = environment.get(key, "").strip()
-        if not raw_value:
-            continue
-        try:
-            return max(0, int(raw_value))
-        except ValueError:
-            continue
+        retry_count = _parse_retry_count_candidate(environment.get(key), key, logger)
+        if retry_count is not None:
+            return retry_count
     return None
+
+
+def _parse_retry_count_candidate(
+    raw_value: str | None,
+    variable_name: str,
+    logger: logging.Logger,
+) -> int | None:
+    if raw_value is None:
+        return None
+    stripped_value = raw_value.strip()
+    if not stripped_value:
+        return None
+    return _normalize_counter_value(stripped_value, variable_name, logger)
+
+
+def _normalize_counter_value(
+    raw_value: str | None,
+    variable_name: str,
+    logger: logging.Logger,
+) -> int:
+    if raw_value is None:
+        return 0
+    stripped_value = raw_value.strip()
+    if not stripped_value:
+        return 0
+    try:
+        return max(0, int(stripped_value))
+    except ValueError:
+        logger.warning(
+            "Variable de reintento invalida variable=%s value=%s; usando 0",
+            variable_name,
+            raw_value,
+        )
+        return 0
 
 
 def _read_channel_variable(
@@ -727,10 +875,46 @@ def _resolve_listen_attempt_settings(
     *,
     config: AppConfig,
     retry_count: int,
+    requested_profile_name: str | None = None,
 ) -> ListenAttemptSettings:
+    if requested_profile_name == "first_attempt":
+        return config.ivr.listen_profiles.first_attempt
+    if requested_profile_name == "retry_attempt":
+        return config.ivr.listen_profiles.retry_attempt
+    if requested_profile_name == "objection_probe":
+        return config.ivr.listen_profiles.objection_probe
     if retry_count <= 0:
         return config.ivr.listen_profiles.first_attempt
     return config.ivr.listen_profiles.retry_attempt
+
+
+def _resolve_listen_profile_name(
+    session: AgiSession,
+    call_environment: Mapping[str, str],
+    logger: logging.Logger,
+) -> str | None:
+    raw_profile = ""
+    for variable_name in ("IVR_LISTEN_PROFILE", "ivr_listen_profile"):
+        candidate = call_environment.get(variable_name, "").strip()
+        if candidate:
+            raw_profile = candidate
+            break
+
+    if not raw_profile:
+        raw_profile = _read_channel_variable(session, "IVR_LISTEN_PROFILE", logger) or ""
+
+    if not raw_profile:
+        return None
+
+    normalized_profile = raw_profile.strip().lower()
+    if normalized_profile in VALID_LISTEN_PROFILE_NAMES:
+        return normalized_profile
+
+    logger.warning(
+        "Valor invalido de IVR_LISTEN_PROFILE=%s; usando fallback seguro por TRY/VOSK_TRY.",
+        raw_profile,
+    )
+    return None
 
 
 def _log_listen_diagnostics(
@@ -738,10 +922,15 @@ def _log_listen_diagnostics(
     logger: logging.Logger,
     config: AppConfig,
     retry_count: int,
+    try_value: int,
+    vosk_try_value: int,
+    flow_stage: str | None,
     capture_result: CaptureResult | None,
     finish_reason: str,
     transcript: str,
     raw_messages: tuple[dict[str, object], ...],
+    source: str,
+    error_reason: str | None,
 ) -> None:
     had_audio = capture_result is not None and capture_result.bytes_read > 0
     duration_ms = capture_result.duration_ms if capture_result is not None else 0
@@ -754,9 +943,12 @@ def _log_listen_diagnostics(
     )
     logger.info(
         (
-            "EAGI listen_diagnostic try=%s had_audio=%s speech_started=%s "
-            "duration_ms=%s stop_reason=%s transcript=%s early_partial=%s"
+            "EAGI listen_diagnostic stage=%s TRY=%s VOSK_TRY=%s retry_count=%s had_audio=%s "
+            "speech_started=%s duration_ms=%s stop_reason=%s transcript=%s early_partial=%s"
         ),
+        flow_stage or "",
+        try_value,
+        vosk_try_value,
         retry_count,
         had_audio,
         speech_started,
@@ -764,6 +956,25 @@ def _log_listen_diagnostics(
         finish_reason,
         masked_transcript or "-",
         masked_early_partial or "-",
+    )
+    if error_reason is None:
+        return
+
+    logger.warning(
+        (
+            "EAGI listen_error stage=%s TRY=%s VOSK_TRY=%s had_audio=%s speech_started=%s "
+            "duration_ms=%s stop_reason=%s source=%s transcript=%s exception=%s"
+        ),
+        flow_stage or "",
+        try_value,
+        vosk_try_value,
+        had_audio,
+        speech_started,
+        duration_ms,
+        finish_reason,
+        source,
+        masked_transcript or "-",
+        error_reason,
     )
 
 

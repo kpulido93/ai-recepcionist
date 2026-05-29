@@ -5,7 +5,8 @@ import json
 import logging
 from pathlib import Path
 
-from vicidial_vosk_cobranza_ivr.app import _log_result, run_eagi_session
+import vicidial_vosk_cobranza_ivr.app as app_module
+from vicidial_vosk_cobranza_ivr.app import _load_runtime_app_config, _log_result, run_eagi_session
 from vicidial_vosk_cobranza_ivr.audio import CaptureResult
 from vicidial_vosk_cobranza_ivr.config import (
     AppConfig,
@@ -16,6 +17,7 @@ from vicidial_vosk_cobranza_ivr.config import (
     ListenProfilesSettings,
     LoggingSettings,
     PromptsSettings,
+    RuntimePaths,
     VoskSettings,
 )
 from vicidial_vosk_cobranza_ivr.decision_engine import DecisionEngine
@@ -50,6 +52,9 @@ class FakeSession:
     def set_variable(self, name: str, value: str) -> str:
         self.variables[name] = value
         return self.set_variable_response
+
+    def get_variable(self, name: str) -> str | None:
+        return self.channel_variables.get(name)
 
     def verbose(self, message: str, level: int = 1) -> None:
         self.verbose_messages.append((message, level))
@@ -113,6 +118,13 @@ def build_config() -> AppConfig:
                     initial_timeout_seconds=3.0,
                     max_listen_seconds=3,
                     silence_after_speech_ms=650,
+                    min_speech_ms=250,
+                    early_detection_min_audio_ms=250,
+                ),
+                objection_probe=ListenAttemptSettings(
+                    initial_timeout_seconds=1.8,
+                    max_listen_seconds=2,
+                    silence_after_speech_ms=550,
                     min_speech_ms=250,
                     early_detection_min_audio_ms=250,
                 ),
@@ -187,37 +199,51 @@ def build_service(vosk_client: VoskClient) -> CobranzaIvrService:
     )
     decision_engine = DecisionEngine.from_mapping(
         {
-            "SI": {
-                "transfer_eligible": True,
-                "decision": "TRANSFER",
-                "final_disposition": "VOZ_SI_ABOGADO",
-                "priority": 10,
-                "retry_allowed": False,
-                "hard_block": False,
+            "defaults": {
+                "SI": {
+                    "transfer_eligible": True,
+                    "decision": "TRANSFER",
+                    "final_disposition": "VOZ_SI_ABOGADO",
+                    "priority": 10,
+                    "retry_allowed": False,
+                    "hard_block": False,
+                },
+                "NO": {
+                    "transfer_eligible": False,
+                    "decision": "NO_TRANSFER",
+                    "final_disposition": "VOZ_NO_FINALIZA",
+                    "priority": 20,
+                    "retry_allowed": False,
+                    "hard_block": True,
+                },
+                "DUDA": {
+                    "transfer_eligible": False,
+                    "decision": "RETRY",
+                    "final_disposition": "VOZ_DUDA",
+                    "priority": 5,
+                    "retry_allowed": True,
+                    "hard_block": False,
+                },
+                "SILENCIO": {
+                    "transfer_eligible": False,
+                    "decision": "RETRY",
+                    "final_disposition": "VOZ_SILENCIO",
+                    "priority": 1,
+                    "retry_allowed": True,
+                    "hard_block": False,
+                },
             },
-            "NO": {
-                "transfer_eligible": False,
-                "decision": "NO_TRANSFER",
-                "final_disposition": "VOZ_NO_FINALIZA",
-                "priority": 20,
-                "retry_allowed": False,
-                "hard_block": True,
-            },
-            "DUDA": {
-                "transfer_eligible": False,
-                "decision": "RETRY",
-                "final_disposition": "VOZ_DUDA",
-                "priority": 5,
-                "retry_allowed": True,
-                "hard_block": False,
-            },
-            "SILENCIO": {
-                "transfer_eligible": False,
-                "decision": "RETRY",
-                "final_disposition": "VOZ_SILENCIO",
-                "priority": 1,
-                "retry_allowed": True,
-                "hard_block": False,
+            "stages": {
+                "greeting_check": {
+                    "SI": {
+                        "transfer_eligible": False,
+                        "decision": "CONTINUE",
+                        "final_disposition": "VOZ_CONTINUA_GREETING",
+                        "priority": 10,
+                        "retry_allowed": False,
+                        "hard_block": False,
+                    }
+                }
             },
         }
     )
@@ -493,6 +519,71 @@ def test_run_eagi_session_classifies_speech_and_sets_confidence() -> None:
     assert session.variables["VOSK_MATCHED_VALUE"] == "quiero hablar"
 
 
+def test_run_eagi_session_uses_vosk_flow_stage_from_channel_variable() -> None:
+    session = FakeSession(
+        {"agi_channel": "SIP/test-stage", "agi_callerid": "123456"},
+        channel_variables={"VOSK_FLOW_STAGE": "greeting_check"},
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(
+            transcript="si",
+            raw_messages=[{"text": "si"}],
+            confidence=0.99,
+        )
+    )
+    service = build_service(vosk_client)
+    config = build_config()
+    logger = build_logger("test_eagi_app.flow_stage")
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=lambda fd, listen_seconds, sample_rate: b"\xff\x7f" * 400,
+        environment=session.environment,
+    )
+
+    assert result == 0
+    assert session.variables["VOSK_INTENT"] == "SI"
+    assert session.variables["VOSK_DECISION"] == "CONTINUE"
+    assert session.variables["VOSK_TRANSFER_ELIGIBLE"] == "0"
+    assert session.variables["VOSK_FINAL_DISPOSITION"] == "VOZ_CONTINUA_GREETING"
+
+
+def test_run_eagi_session_uses_flow_stage_from_agi_arg_3() -> None:
+    session = FakeSession(
+        {
+            "agi_channel": "SIP/test-stage-arg3",
+            "agi_callerid": "123456",
+            "agi_arg_3": "greeting_check",
+        }
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(
+            transcript="si",
+            raw_messages=[{"text": "si"}],
+            confidence=0.99,
+        )
+    )
+    service = build_service(vosk_client)
+    config = build_config()
+    logger = build_logger("test_eagi_app.flow_stage_arg3")
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=lambda fd, listen_seconds, sample_rate: b"\xff\x7f" * 400,
+        environment=session.environment,
+    )
+
+    assert result == 0
+    assert session.variables["VOSK_DECISION"] == "CONTINUE"
+    assert session.variables["VOSK_TRANSFER_ELIGIBLE"] == "0"
+
+
 def test_run_eagi_session_logs_vad_metrics_and_prefers_early_intent_stop_reason() -> None:
     session = FakeSession({"agi_channel": "SIP/test-vad", "agi_callerid": "123456"})
     vosk_client = StubVoskClient(
@@ -541,9 +632,87 @@ def test_run_eagi_session_logs_vad_metrics_and_prefers_early_intent_stop_reason(
     assert "rms_avg=12000.00" in logged
     assert "rms_max=32767.00" in logged
     assert "stop_reason=early_intent" in logged
-    assert "try=0" in logged
+    assert "TRY=0" in logged
+    assert "VOSK_TRY=0" in logged
+    assert "stage=" in logged
     assert "transcript=si" in logged
     assert "early_partial=si" in logged
+
+
+def test_run_eagi_session_logs_invalid_retry_values_as_zero() -> None:
+    session = FakeSession(
+        {
+            "agi_channel": "SIP/test-invalid-retry",
+            "agi_callerid": "123456",
+            "TRY": "bad",
+        },
+        channel_variables={"VOSK_TRY": "oops"},
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(transcript="si", raw_messages=[{"text": "si"}], confidence=0.95)
+    )
+    service = build_service(vosk_client)
+    config = build_config()
+    logger = logging.getLogger("test_eagi_app.invalid_retry_values")
+    logger.handlers.clear()
+    logger.propagate = False
+    stream = io.StringIO()
+    logger.addHandler(logging.StreamHandler(stream))
+    logger.setLevel(logging.INFO)
+    observed_listen_seconds: list[int] = []
+
+    def capture_audio(fd: int, listen_seconds: int, sample_rate: int) -> bytes:
+        del fd, sample_rate
+        observed_listen_seconds.append(listen_seconds)
+        return b"\xff\x7f" * 400
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=capture_audio,
+        environment=session.environment,
+    )
+
+    logged = stream.getvalue()
+
+    assert result == 0
+    assert observed_listen_seconds == [config.ivr.listen_profiles.first_attempt.max_listen_seconds]
+    assert "Variable de reintento invalida variable=TRY value=bad; usando 0" in logged
+    assert "Variable de reintento invalida variable=VOSK_TRY value=oops; usando 0" in logged
+    assert "TRY=0" in logged
+    assert "VOSK_TRY=0" in logged
+
+
+def test_run_eagi_session_treats_empty_retry_values_as_zero() -> None:
+    session = FakeSession(
+        {
+            "agi_channel": "SIP/test-empty-retry",
+            "agi_callerid": "123456",
+            "TRY": "",
+        },
+        channel_variables={"VOSK_TRY": ""},
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(transcript="si", raw_messages=[{"text": "si"}], confidence=0.95)
+    )
+    service = build_service(vosk_client)
+    config = build_config()
+    logger = build_logger("test_eagi_app.empty_retry_values")
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=lambda fd, listen_seconds, sample_rate: b"\xff\x7f" * 400,
+        environment=session.environment,
+    )
+
+    assert result == 0
+    assert session.variables["VOSK_DECISION"] == "TRANSFER"
+    assert session.variables["VOSK_TRANSFER_ELIGIBLE"] == "1"
 
 
 def test_run_eagi_session_uses_retry_profile_from_channel_variable() -> None:
@@ -577,6 +746,106 @@ def test_run_eagi_session_uses_retry_profile_from_channel_variable() -> None:
     assert result == 0
     assert observed_listen_seconds == [retry_profile.max_listen_seconds]
     assert "GET VARIABLE VOSK_TRY" in session.commands
+
+
+def test_run_eagi_session_uses_objection_probe_from_channel_variable() -> None:
+    session = FakeSession(
+        {"agi_channel": "SIP/test-objection-probe", "agi_callerid": "123456"},
+        channel_variables={"IVR_LISTEN_PROFILE": "objection_probe"},
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(transcript="si", raw_messages=[{"text": "si"}], confidence=0.95)
+    )
+    service = build_service(vosk_client)
+    config = build_config()
+    objection_probe = config.ivr.listen_profiles.objection_probe
+    logger = build_logger("test_eagi_app.objection_probe")
+    observed_listen_seconds: list[int] = []
+
+    def capture_audio(fd: int, listen_seconds: int, sample_rate: int) -> bytes:
+        del fd, sample_rate
+        observed_listen_seconds.append(listen_seconds)
+        return b"\xff\x7f" * 400
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=capture_audio,
+        environment=session.environment,
+    )
+
+    assert result == 0
+    assert observed_listen_seconds == [objection_probe.max_listen_seconds]
+    assert "GET VARIABLE IVR_LISTEN_PROFILE" in session.commands
+
+
+def test_run_eagi_session_ignores_invalid_listen_profile_value() -> None:
+    session = FakeSession(
+        {"agi_channel": "SIP/test-invalid-profile", "agi_callerid": "123456"},
+        channel_variables={"IVR_LISTEN_PROFILE": "perfil-invalido"},
+    )
+    vosk_client = StubVoskClient(
+        result=RecognitionResult(transcript="si", raw_messages=[{"text": "si"}], confidence=0.95)
+    )
+    service = build_service(vosk_client)
+    config = build_config()
+    logger = logging.getLogger("test_eagi_app.invalid_listen_profile")
+    logger.handlers.clear()
+    logger.propagate = False
+    stream = io.StringIO()
+    logger.addHandler(logging.StreamHandler(stream))
+    logger.setLevel(logging.INFO)
+    observed_listen_seconds: list[int] = []
+
+    def capture_audio(fd: int, listen_seconds: int, sample_rate: int) -> bytes:
+        del fd, sample_rate
+        observed_listen_seconds.append(listen_seconds)
+        return b"\xff\x7f" * 400
+
+    result = run_eagi_session(
+        session=session,
+        service=service,
+        config=config,
+        logger=logger,
+        capture_audio=capture_audio,
+        environment=session.environment,
+    )
+
+    assert result == 0
+    assert observed_listen_seconds == [config.ivr.listen_profiles.first_attempt.max_listen_seconds]
+    assert "Valor invalido de IVR_LISTEN_PROFILE=perfil-invalido" in stream.getvalue()
+
+
+def test_load_runtime_app_config_supports_legacy_loader_signature() -> None:
+    logger = logging.getLogger("test_eagi_app.legacy_loader")
+    logger.handlers.clear()
+    logger.propagate = False
+    stream = io.StringIO()
+    logger.addHandler(logging.StreamHandler(stream))
+    logger.setLevel(logging.INFO)
+    runtime_paths = RuntimePaths(
+        config_path=Path("/tmp/ivr.yml"),
+        intents_path=Path("/tmp/intents.yml"),
+        logging_path=Path("/tmp/logging.yml"),
+    )
+    calls: list[tuple[Path, Path]] = []
+    original_loader = app_module.load_app_config
+
+    def legacy_loader(config_path: Path, intents_path: Path) -> AppConfig:
+        calls.append((config_path, intents_path))
+        return build_config()
+
+    app_module.load_app_config = legacy_loader
+    try:
+        config = _load_runtime_app_config(runtime_paths, logger)
+    finally:
+        app_module.load_app_config = original_loader
+
+    assert config.ivr.sample_rate == 8000
+    assert calls == [(runtime_paths.config_path, runtime_paths.intents_path)]
+    assert "compatibilidad temporal" in stream.getvalue()
 
 
 def test_log_result_omits_transcript_when_log_transcript_is_disabled() -> None:

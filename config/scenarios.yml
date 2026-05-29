@@ -1,151 +1,813 @@
-"AMENAZA_VERBAL":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_AMENAZA_VERBAL"
-  priority: 100
-  retry_allowed: false
-  hard_block: true
+"defaults":
+  "AMENAZA_VERBAL":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_AMENAZA_VERBAL"
+    priority: 100
+    retry_allowed: false
+    hard_block: true
 
-"VULGARIDAD":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_VULGARIDAD"
-  priority: 95
-  retry_allowed: false
-  hard_block: true
+  "VULGARIDAD":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_VULGARIDAD"
+    priority: 95
+    retry_allowed: false
+    hard_block: true
 
-"NUMERO_EQUIVOCADO":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_NUMERO_EQUIVOCADO"
-  priority: 90
-  retry_allowed: false
-  hard_block: true
+  "NUMERO_EQUIVOCADO":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_NUMERO_EQUIVOCADO"
+    priority: 90
+    retry_allowed: false
+    hard_block: true
 
-"NO_ES_PERSONA":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_NO_ES_PERSONA"
-  priority: 88
-  retry_allowed: false
-  hard_block: true
+  "NO_ES_PERSONA":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_NO_ES_PERSONA"
+    priority: 88
+    retry_allowed: false
+    hard_block: true
 
-"TERCERO":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_TERCERO"
-  priority: 86
-  retry_allowed: false
-  hard_block: true
+  "TERCERO":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_TERCERO"
+    priority: 86
+    retry_allowed: false
+    hard_block: true
 
-"NO":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_NO_FINALIZA"
-  priority: 84
-  retry_allowed: false
-  hard_block: true
+  "NO":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_NO_FINALIZA"
+    priority: 84
+    retry_allowed: false
+    hard_block: true
 
-"CALLBACK":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_CALLBACK"
-  priority: 82
-  retry_allowed: false
-  hard_block: true
+  "RECHAZA_ACUERDO":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_RECHAZA_ACUERDO"
+    priority: 83
+    retry_allowed: false
+    hard_block: false
 
-"FRAUDE_O_DESCONFIANZA":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_FRAUDE_O_DESCONFIANZA"
-  priority: 80
-  retry_allowed: false
-  hard_block: true
+  "CALLBACK_MANANA":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_CALLBACK_MANANA"
+    priority: 82
+    retry_allowed: false
+    hard_block: false
 
-"SI":
-  transfer_eligible: true
-  decision: "TRANSFER"
-  final_disposition: "VOZ_SI_ABOGADO"
-  priority: 60
-  retry_allowed: false
-  hard_block: false
+  "CALLBACK":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_CALLBACK"
+    priority: 81
+    retry_allowed: false
+    hard_block: true
 
-"TRANSFER_REQUEST":
-  transfer_eligible: true
-  decision: "TRANSFER"
-  final_disposition: "VOZ_TRANSFER_REQUEST"
-  priority: 62
-  retry_allowed: false
-  hard_block: false
+  "ESTA_OCUPADO":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_CALLBACK"
+    priority: 80
+    retry_allowed: false
+    hard_block: false
 
-"INFO_COBRO":
-  transfer_eligible: true
-  decision: "TRANSFER"
-  final_disposition: "VOZ_INFO_COBRO"
-  priority: 64
-  retry_allowed: false
-  hard_block: false
+  "WHATSAPP_INFO":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_WHATSAPP"
+    priority: 79
+    retry_allowed: false
+    hard_block: false
 
-"INFO_DEUDA":
-  transfer_eligible: true
-  decision: "TRANSFER"
-  final_disposition: "VOZ_INFO_DEUDA"
-  priority: 66
-  retry_allowed: false
-  hard_block: false
+  "FRAUDE_O_DESCONFIANZA":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_FRAUDE_O_DESCONFIANZA"
+    priority: 78
+    retry_allowed: false
+    hard_block: true
 
-"PROMESA_PAGO":
-  transfer_eligible: true
-  decision: "TRANSFER"
-  final_disposition: "VOZ_PROMESA_PAGO"
-  priority: 68
-  retry_allowed: false
-  hard_block: false
+  "SI":
+    transfer_eligible: true
+    decision: "TRANSFER"
+    final_disposition: "VOZ_SI_ABOGADO"
+    priority: 60
+    retry_allowed: false
+    hard_block: false
 
-"QUIERE_ACUERDO":
-  transfer_eligible: true
-  decision: "TRANSFER"
-  final_disposition: "VOZ_QUIERE_ACUERDO"
-  priority: 70
-  retry_allowed: false
-  hard_block: false
+  "TRANSFER_REQUEST":
+    transfer_eligible: true
+    decision: "TRANSFER"
+    final_disposition: "VOZ_TRANSFER_REQUEST"
+    priority: 62
+    retry_allowed: false
+    hard_block: false
 
-"YA_PAGO":
-  transfer_eligible: true
-  decision: "TRANSFER"
-  final_disposition: "VOZ_YA_PAGO"
-  priority: 72
-  retry_allowed: false
-  hard_block: false
+  "INFO_COBRO":
+    transfer_eligible: true
+    decision: "TRANSFER"
+    final_disposition: "VOZ_INFO_COBRO"
+    priority: 64
+    retry_allowed: false
+    hard_block: false
 
-"DISPUTA_DEUDA":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_DISPUTA_DEUDA"
-  priority: 74
-  retry_allowed: false
-  hard_block: false
+  "INFO_DEUDA":
+    transfer_eligible: true
+    decision: "TRANSFER"
+    final_disposition: "VOZ_INFO_DEUDA"
+    priority: 66
+    retry_allowed: false
+    hard_block: false
 
-"NO_PUEDE_PAGAR":
-  transfer_eligible: false
-  decision: "NO_TRANSFER"
-  final_disposition: "VOZ_NO_PUEDE_PAGAR"
-  priority: 76
-  retry_allowed: false
-  hard_block: false
+  "PROMESA_PAGO":
+    transfer_eligible: true
+    decision: "TRANSFER"
+    final_disposition: "VOZ_PROMESA_PAGO"
+    priority: 68
+    retry_allowed: false
+    hard_block: false
 
-"DUDA":
-  transfer_eligible: false
-  decision: "RETRY"
-  final_disposition: "VOZ_DUDA"
-  priority: 20
-  retry_allowed: true
-  hard_block: false
+  "QUIERE_ACUERDO":
+    transfer_eligible: true
+    decision: "TRANSFER"
+    final_disposition: "VOZ_QUIERE_ACUERDO"
+    priority: 70
+    retry_allowed: false
+    hard_block: false
 
-"SILENCIO":
-  transfer_eligible: false
-  decision: "RETRY"
-  final_disposition: "VOZ_SILENCIO"
-  priority: 10
-  retry_allowed: true
-  hard_block: false
+  "ACEPTA_ACUERDO":
+    transfer_eligible: true
+    decision: "TRANSFER"
+    final_disposition: "VOZ_ACEPTA_ACUERDO"
+    priority: 72
+    retry_allowed: false
+    hard_block: false
+
+  "YA_PAGO":
+    transfer_eligible: true
+    decision: "TRANSFER"
+    final_disposition: "VOZ_YA_PAGO"
+    priority: 74
+    retry_allowed: false
+    hard_block: false
+
+  "CONFIRMA_PERSONA":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_CONFIRMA_PERSONA"
+    priority: 58
+    retry_allowed: false
+    hard_block: false
+
+  "DISPUTA_DEUDA":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_DISPUTA_DEUDA"
+    priority: 56
+    retry_allowed: false
+    hard_block: false
+
+  "NO_PUEDE_PAGAR":
+    transfer_eligible: false
+    decision: "NO_TRANSFER"
+    final_disposition: "VOZ_NO_PUEDE_PAGAR"
+    priority: 54
+    retry_allowed: false
+    hard_block: false
+
+  "DUDA":
+    transfer_eligible: false
+    decision: "RETRY"
+    final_disposition: "VOZ_DUDA"
+    priority: 20
+    retry_allowed: true
+    hard_block: false
+
+  "SILENCIO":
+    transfer_eligible: false
+    decision: "RETRY"
+    final_disposition: "VOZ_SILENCIO"
+    priority: 10
+    retry_allowed: true
+    hard_block: false
+
+"stages":
+  "greeting_check":
+    "INTERRUPCION":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_INTERRUPCION_CONTINUA"
+      priority: 78
+      retry_allowed: false
+      hard_block: false
+
+    "PREGUNTA_DEUDA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_PREGUNTA_DEUDA_CONTINUA"
+      priority: 77
+      retry_allowed: false
+      hard_block: false
+
+    "AMENAZA_VERBAL":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_AMENAZA_VERBAL"
+      priority: 100
+      retry_allowed: false
+      hard_block: true
+
+    "VULGARIDAD":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_VULGARIDAD"
+      priority: 95
+      retry_allowed: false
+      hard_block: true
+
+    "NUMERO_EQUIVOCADO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NUMERO_EQUIVOCADO"
+      priority: 90
+      retry_allowed: false
+      hard_block: true
+
+    "NO_ES_PERSONA":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NO_ES_PERSONA"
+      priority: 88
+      retry_allowed: false
+      hard_block: true
+
+    "TERCERO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_TERCERO"
+      priority: 86
+      retry_allowed: false
+      hard_block: true
+
+    "NO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NO_FINALIZA"
+      priority: 84
+      retry_allowed: false
+      hard_block: true
+
+    "SI":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_GREETING"
+      priority: 60
+      retry_allowed: false
+      hard_block: false
+
+    "CONFIRMA_PERSONA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_GREETING"
+      priority: 59
+      retry_allowed: false
+      hard_block: false
+
+    "DUDA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_GREETING"
+      priority: 20
+      retry_allowed: false
+      hard_block: false
+
+    "SILENCIO":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_GREETING"
+      priority: 10
+      retry_allowed: false
+      hard_block: false
+
+    "CALLBACK":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CALLBACK"
+      priority: 81
+      retry_allowed: false
+      hard_block: false
+
+    "CALLBACK_MANANA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CALLBACK_MANANA"
+      priority: 82
+      retry_allowed: false
+      hard_block: false
+
+    "ESTA_OCUPADO":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CALLBACK"
+      priority: 80
+      retry_allowed: false
+      hard_block: false
+
+    "WHATSAPP_INFO":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_WHATSAPP"
+      priority: 79
+      retry_allowed: false
+      hard_block: false
+
+  "agreement_offer":
+    "INTERRUPCION":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_INTERRUPCION_CONTINUA"
+      priority: 78
+      retry_allowed: false
+      hard_block: false
+
+    "PREGUNTA_DEUDA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_PREGUNTA_DEUDA_CONTINUA"
+      priority: 77
+      retry_allowed: false
+      hard_block: false
+
+    "AMENAZA_VERBAL":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_AMENAZA_VERBAL"
+      priority: 100
+      retry_allowed: false
+      hard_block: true
+
+    "VULGARIDAD":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_VULGARIDAD"
+      priority: 95
+      retry_allowed: false
+      hard_block: true
+
+    "NUMERO_EQUIVOCADO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NUMERO_EQUIVOCADO"
+      priority: 90
+      retry_allowed: false
+      hard_block: true
+
+    "NO_ES_PERSONA":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NO_ES_PERSONA"
+      priority: 88
+      retry_allowed: false
+      hard_block: true
+
+    "TERCERO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_TERCERO"
+      priority: 86
+      retry_allowed: false
+      hard_block: true
+
+    "SI":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_SI_ABOGADO"
+      priority: 60
+      retry_allowed: false
+      hard_block: false
+
+    "TRANSFER_REQUEST":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_TRANSFER_REQUEST"
+      priority: 62
+      retry_allowed: false
+      hard_block: false
+
+    "PROMESA_PAGO":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_PROMESA_PAGO"
+      priority: 68
+      retry_allowed: false
+      hard_block: false
+
+    "QUIERE_ACUERDO":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_QUIERE_ACUERDO"
+      priority: 70
+      retry_allowed: false
+      hard_block: false
+
+    "ACEPTA_ACUERDO":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_ACEPTA_ACUERDO"
+      priority: 72
+      retry_allowed: false
+      hard_block: false
+
+    "INFO_DEUDA":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_INFO_DEUDA"
+      priority: 66
+      retry_allowed: false
+      hard_block: false
+
+    "INFO_COBRO":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_INFO_COBRO"
+      priority: 64
+      retry_allowed: false
+      hard_block: false
+
+    "CALLBACK":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CALLBACK"
+      priority: 81
+      retry_allowed: false
+      hard_block: false
+
+    "CALLBACK_MANANA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CALLBACK_MANANA"
+      priority: 82
+      retry_allowed: false
+      hard_block: false
+
+    "ESTA_OCUPADO":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CALLBACK"
+      priority: 80
+      retry_allowed: false
+      hard_block: false
+
+    "WHATSAPP_INFO":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_WHATSAPP_TRANSFER"
+      priority: 79
+      retry_allowed: false
+      hard_block: false
+
+    "NO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NO_FINALIZA"
+      priority: 84
+      retry_allowed: false
+      hard_block: false
+
+    "RECHAZA_ACUERDO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_RECHAZA_ACUERDO"
+      priority: 83
+      retry_allowed: false
+      hard_block: false
+
+    "DUDA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_CALLBACK"
+      priority: 20
+      retry_allowed: false
+      hard_block: false
+
+    "SILENCIO":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_CALLBACK"
+      priority: 10
+      retry_allowed: false
+      hard_block: false
+
+    "CONFIRMA_PERSONA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_CALLBACK"
+      priority: 59
+      retry_allowed: false
+      hard_block: false
+
+  "callback_offer":
+    "INTERRUPCION":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_INTERRUPCION_CONTINUA"
+      priority: 78
+      retry_allowed: false
+      hard_block: false
+
+    "PREGUNTA_DEUDA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_PREGUNTA_DEUDA_CONTINUA"
+      priority: 77
+      retry_allowed: false
+      hard_block: false
+
+    "AMENAZA_VERBAL":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_AMENAZA_VERBAL"
+      priority: 100
+      retry_allowed: false
+      hard_block: true
+
+    "VULGARIDAD":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_VULGARIDAD"
+      priority: 95
+      retry_allowed: false
+      hard_block: true
+
+    "NUMERO_EQUIVOCADO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NUMERO_EQUIVOCADO"
+      priority: 90
+      retry_allowed: false
+      hard_block: true
+
+    "NO_ES_PERSONA":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NO_ES_PERSONA"
+      priority: 88
+      retry_allowed: false
+      hard_block: true
+
+    "TERCERO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_TERCERO"
+      priority: 86
+      retry_allowed: false
+      hard_block: true
+
+    "SI":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_CALLBACK_MANANA"
+      priority: 60
+      retry_allowed: false
+      hard_block: false
+
+    "CALLBACK":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_CALLBACK_MANANA"
+      priority: 81
+      retry_allowed: false
+      hard_block: false
+
+    "CALLBACK_MANANA":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_CALLBACK_MANANA"
+      priority: 82
+      retry_allowed: false
+      hard_block: false
+
+    "ESTA_OCUPADO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_CALLBACK_MANANA"
+      priority: 80
+      retry_allowed: false
+      hard_block: false
+
+    "NO":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_WHATSAPP"
+      priority: 84
+      retry_allowed: false
+      hard_block: false
+
+    "RECHAZA_ACUERDO":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_WHATSAPP"
+      priority: 83
+      retry_allowed: false
+      hard_block: false
+
+    "DUDA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_WHATSAPP"
+      priority: 20
+      retry_allowed: false
+      hard_block: false
+
+    "SILENCIO":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_WHATSAPP"
+      priority: 10
+      retry_allowed: false
+      hard_block: false
+
+    "CONFIRMA_PERSONA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_CONTINUA_WHATSAPP"
+      priority: 59
+      retry_allowed: false
+      hard_block: false
+
+    "WHATSAPP_INFO":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_WHATSAPP_TRANSFER"
+      priority: 79
+      retry_allowed: false
+      hard_block: false
+
+  "whatsapp_offer":
+    "INTERRUPCION":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_INTERRUPCION_CONTINUA"
+      priority: 78
+      retry_allowed: false
+      hard_block: false
+
+    "PREGUNTA_DEUDA":
+      transfer_eligible: false
+      decision: "CONTINUE"
+      final_disposition: "VOZ_PREGUNTA_DEUDA_CONTINUA"
+      priority: 77
+      retry_allowed: false
+      hard_block: false
+
+    "AMENAZA_VERBAL":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_AMENAZA_VERBAL"
+      priority: 100
+      retry_allowed: false
+      hard_block: true
+
+    "VULGARIDAD":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_VULGARIDAD"
+      priority: 95
+      retry_allowed: false
+      hard_block: true
+
+    "NUMERO_EQUIVOCADO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NUMERO_EQUIVOCADO"
+      priority: 90
+      retry_allowed: false
+      hard_block: true
+
+    "NO_ES_PERSONA":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_NO_ES_PERSONA"
+      priority: 88
+      retry_allowed: false
+      hard_block: true
+
+    "TERCERO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_TERCERO"
+      priority: 86
+      retry_allowed: false
+      hard_block: true
+
+    "TRANSFER_REQUEST":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_TRANSFER_REQUEST"
+      priority: 62
+      retry_allowed: false
+      hard_block: false
+
+    "SI":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_WHATSAPP"
+      priority: 60
+      retry_allowed: false
+      hard_block: false
+
+    "WHATSAPP_INFO":
+      transfer_eligible: true
+      decision: "TRANSFER"
+      final_disposition: "VOZ_WHATSAPP_TRANSFER"
+      priority: 79
+      retry_allowed: false
+      hard_block: false
+
+    "INFO_DEUDA":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_WHATSAPP"
+      priority: 66
+      retry_allowed: false
+      hard_block: false
+
+    "INFO_COBRO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_WHATSAPP"
+      priority: 64
+      retry_allowed: false
+      hard_block: false
+
+    "PROMESA_PAGO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_WHATSAPP"
+      priority: 68
+      retry_allowed: false
+      hard_block: false
+
+    "QUIERE_ACUERDO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_WHATSAPP"
+      priority: 70
+      retry_allowed: false
+      hard_block: false
+
+    "ACEPTA_ACUERDO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_WHATSAPP"
+      priority: 72
+      retry_allowed: false
+      hard_block: false
+
+    "NO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_FINALIZA_EDUCADO"
+      priority: 84
+      retry_allowed: false
+      hard_block: false
+
+    "RECHAZA_ACUERDO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_FINALIZA_EDUCADO"
+      priority: 83
+      retry_allowed: false
+      hard_block: false
+
+    "DUDA":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_FINALIZA_EDUCADO"
+      priority: 20
+      retry_allowed: false
+      hard_block: false
+
+    "SILENCIO":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_FINALIZA_EDUCADO"
+      priority: 10
+      retry_allowed: false
+      hard_block: false
+
+    "CONFIRMA_PERSONA":
+      transfer_eligible: false
+      decision: "NO_TRANSFER"
+      final_disposition: "VOZ_FINALIZA_EDUCADO"
+      priority: 59
+      retry_allowed: false
+      hard_block: false

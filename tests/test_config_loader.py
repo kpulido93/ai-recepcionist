@@ -53,6 +53,12 @@ ivr:
       silence_after_speech_ms: 700
       min_speech_ms: 250
       early_detection_min_audio_ms: 250
+    objection_probe:
+      initial_timeout_seconds: 1.8
+      max_listen_seconds: 2
+      silence_after_speech_ms: 550
+      min_speech_ms: 250
+      early_detection_min_audio_ms: 250
   rms_speech_threshold: 250.0
   max_dtmf_wait_ms: 3000
   dtmf_map:
@@ -93,6 +99,25 @@ prompts:
   tts_provider: "espeak-ng"
   tts_voice: "es-la"
   cache_enabled: true
+optima_audio:
+  enabled: true
+  provider: "elevenlabs"
+  cache_enabled: true
+  cache_dir: "/tmp/generated-optima"
+  mirror_dirs:
+    - "/tmp/generated-optima-mirror"
+  playback_prefix: "custom/generated/optima"
+  version: "v1-optima-segmented"
+  env_file: "/etc/asterisk/elevenlabs.env"
+  max_name_chars: 80
+  max_bank_chars: 120
+  fallback_on_error: true
+  templates:
+    saludo_nombre: "Saludos {name}."
+    deuda_banco: "Por la deuda que mantiene en {bank}."
+  fallbacks:
+    saludo_generico_audio: "custom/optima-01-saludo-generico"
+    deuda_generica_audio: "custom/optima-04-deuda-generica"
 """.strip(),
     )
     write_text(
@@ -129,6 +154,8 @@ prompts:
     assert config.ivr.listen_profiles.first_attempt.silence_after_speech_ms == 900
     assert config.ivr.listen_profiles.first_attempt.min_speech_ms == 300
     assert config.ivr.listen_profiles.retry_attempt.initial_timeout_seconds == 4.5
+    assert config.ivr.listen_profiles.objection_probe.initial_timeout_seconds == 1.8
+    assert config.ivr.listen_profiles.objection_probe.max_listen_seconds == 2
     assert config.ivr.rms_speech_threshold == 250.0
     assert config.vosk.sample_rate == 8000
     assert config.vosk.websocket_url == "ws://127.0.0.1:2700"
@@ -150,6 +177,12 @@ prompts:
     assert config.prompts.tts_provider == "espeak-ng"
     assert config.prompts.tts_voice == "es-la"
     assert config.prompts.cache_enabled is True
+    assert config.optima_audio.enabled is True
+    assert config.optima_audio.cache_dir == "/tmp/generated-optima"
+    assert config.optima_audio.mirror_dirs == ("/tmp/generated-optima-mirror",)
+    assert config.optima_audio.env_file == "/etc/asterisk/elevenlabs.env"
+    assert config.optima_audio.templates.saludo_nombre == "Saludos {name}."
+    assert config.optima_audio.fallbacks.deuda_generica_audio == "custom/optima-04-deuda-generica"
     assert config.semantic_classifier.enabled is True
     assert config.semantic_classifier.fuzzy_threshold == 0.78
     assert config.semantic_intents["SI"]["aliases"] == ["comunicame"]
@@ -217,6 +250,7 @@ logging:
     assert config.ivr.vad_enabled is True
     assert config.ivr.listen_profiles.first_attempt.max_listen_seconds == 4
     assert config.ivr.listen_profiles.retry_attempt.max_listen_seconds == 4
+    assert config.ivr.listen_profiles.objection_probe.max_listen_seconds == 2
     assert config.logging.mask_phone_numbers is True
     assert config.logging.events_path == DEFAULT_EVENTS_PATH
     assert config.logging.debug_audio_dump_enabled is True
@@ -285,6 +319,7 @@ logging:
     assert config.ivr.listen_profiles.first_attempt.max_listen_seconds == 5
     assert config.ivr.listen_profiles.retry_attempt.max_listen_seconds == 5
     assert config.ivr.listen_profiles.first_attempt.initial_timeout_seconds == 5.0
+    assert config.ivr.listen_profiles.objection_probe.initial_timeout_seconds == 1.8
     assert config.ivr.rms_speech_threshold == 250.0
     assert config.logging.mask_phone_numbers is True
     assert config.logging.events_path == DEFAULT_EVENTS_PATH
